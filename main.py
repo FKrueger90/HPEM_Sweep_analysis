@@ -27,19 +27,25 @@ for dir_in_root in dirs_in_root:
 
     dir_sub = os.path.join(dir_root, dir_in_root)
     # check if file:
-    string_dir_type = "{0:<15}".format("not recognised")
+    string_dir_type = "{0:<17}".format("not recognised")
     if os.path.isfile(dir_sub):
-        string_dir_type = "{0:<15}".format("file")
+        string_dir_type = "{0:<17}".format("file")
 
     # check if directory
     if os.path.isdir(dir_sub):
-        string_dir_type = "{0:<15}".format("directory")
+        string_dir_type = "{0:<17}".format("directory")
 
         # if directory, find out if source or case directory
         # ---------------------------------------------------
-        dirs_in_sub = os.listdir(dir_root)
+        paths_in_sub = os.listdir(dir_sub)
+        for path_in_sub in paths_in_sub:
+            #print(path_in_sub)
+            if os.path.isfile(os.path.join(dir_sub, path_in_sub)):
+                #print("here")
+                #print(path_in_sub)
 
-
+                if "icp.f" in path_in_sub.lower() or "icp.for" in path_in_sub.lower():
+                    string_dir_type = "{0:<17}".format("source directory")
 
     # print(dir)
     print(string_dir_type, dir_in_root)
