@@ -1,4 +1,4 @@
-import os
+import os, re
 
 
 class Case:
@@ -11,8 +11,11 @@ class Case:
         self.powerICP = 0
         self.powerCCP1 = 0
         self.powerCCP2 = 0
+        self.dc_bias = eval(self.find_out_parameter("DC BIAS"))
+        self.ne_ave = eval(self.find_out_parameter("AVERAGE ELECTRON DENSITY"))
+        self.restart = int(self.find_nam_parameter("IRESTART"))
+        print(self.restart)
 
-        # self.find_files()
 
     def find_file_by_name(self, str_match, str_exclude=[]):
         """
@@ -32,16 +35,36 @@ class Case:
                 return os.path.join(self.path, name_file)
         return None
 
+    def find_nam_parameter(self, str_match, multiple_values=False):
 
-    #def find_nam_parameter(self, str_match):
+        with open(self.path_nam, 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                if re.search(rf' *{str_match} *=', line):
+                    if "!" in line:
+                        parameter = re.findall(r'= *(.*),\s*\!', line)[0]
+                    else:
+                        parameter = re.findall(r'= *(.*),\s*$', line)[0]
+                    return parameter
+        return None
 
+    def find_out_parameter(self, str_match):
+        with open(self.path_out, 'r') as f:
+            lines = f.readlines()
+            for line in lines[::-1]:
+                if re.search(rf' *{str_match} *', line):
+
+                    parameter = re.findall(rf' *{str_match} *(.*) ', line)[0]
+                    return parameter
+        return None
 
 
 # initialize case list
 cases = []
 
 # root directory
-dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\Voltage_Waveform_Tailoring\HPEM\ArCF4O2\DarkSpaceGeometry\ConstVoltage_200_1000")
+dir_root = os.path.abspath("C:\\Users\\flori\\Desktop\\temp2\\ConstVoltage_200_1000")
+# dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\Voltage_Waveform_Tailoring\HPEM\ArCF4O2\DarkSpaceGeometry\ConstVoltage_200_1000")
 dirs_in_root = os.listdir(dir_root)
 dir_source = ""
 
@@ -95,12 +118,4 @@ print(f"{len(cases)} case directories found:")
 for case in cases:
     print("   " + case.path)
 
-for case in cases:
-    print("   " + case.path_nam)
-
-for case in cases:
-    print("   " + case.path_out)
-
-for case in cases:
-    print("   " + case.name)
 
