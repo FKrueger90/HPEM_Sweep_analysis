@@ -1,6 +1,30 @@
 import os, re
 
 
+class Cases:
+    def __init__(self):
+        self.cases = []
+
+    def __getitem__(self, i):
+        return self.cases[i]
+
+    def add_case(self, case):
+        self.cases.append(case)
+
+    def __len__(self):
+        return len(self.cases)
+
+    def get_value_pair(self, name_var1, name_var2, custom_waveform_only=False):
+        var1 = []
+        var2 = []
+        for case in self.cases:
+            # check if custom waveform case:
+
+            var1.append(eval("case."+name_var1))
+
+        print(var1)
+
+
 class Case:
     def __init__(self, path):
         self.path = path
@@ -14,8 +38,10 @@ class Case:
         self.dc_bias = eval(self.find_out_parameter("DC BIAS"))
         self.ne_ave = eval(self.find_out_parameter("AVERAGE ELECTRON DENSITY"))
         self.restart = int(self.find_nam_parameter("IRESTART"))
+        self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))
+        self.contains_custom = self.icustom != [0] * len(self.icustom)
+        self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]
         print(self.restart)
-
 
     def find_file_by_name(self, str_match, str_exclude=[]):
         """
@@ -42,9 +68,14 @@ class Case:
             for line in lines:
                 if re.search(rf' *{str_match} *=', line):
                     if "!" in line:
-                        parameter = re.findall(r'= *(.*),\s*\!', line)[0]
+                        parameter = re.findall(r'= *(.*)(?=,*\s*\!)', line)[0]
                     else:
-                        parameter = re.findall(r'= *(.*),\s*$', line)[0]
+                        parameter = re.findall(r'= *(.*)(?=,*\s*$)', line)[0]
+                    # remove leading and trailing whitespaces
+                    parameter = parameter.strip()
+                    # remove last ',' symbol if present
+                    if parameter[-1] == ",":
+                        parameter = parameter[:-1]
                     return parameter
         return None
 
@@ -60,11 +91,11 @@ class Case:
 
 
 # initialize case list
-cases = []
+cases = Cases()
 
 # root directory
-dir_root = os.path.abspath("C:\\Users\\flori\\Desktop\\temp2\\ConstVoltage_200_1000")
-# dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\Voltage_Waveform_Tailoring\HPEM\ArCF4O2\DarkSpaceGeometry\ConstVoltage_200_1000")
+#dir_root = os.path.abspath("C:\\Users\\flori\\Desktop\\temp2\\ConstVoltage_200_1000")
+dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\Voltage_Waveform_Tailoring\HPEM\ArCF4O2\DarkSpaceGeometry\ConstVoltage_200_1000")
 dirs_in_root = os.listdir(dir_root)
 dir_source = ""
 
@@ -101,7 +132,7 @@ for dir_in_root in dirs_in_root:
 
                 if ".log" in path_in_sub.lower():
                     path_case = os.path.join(dir_sub)
-                    cases.append(Case(path_case))
+                    cases.add_case(Case(path_case))
                     break
 
             # if it is a directory, search directory
@@ -111,11 +142,15 @@ for dir_in_root in dirs_in_root:
 
                     if ".log" in path_in_sub_sub.lower():
                         path_case = os.path.join(dir_sub, path_in_sub)
-                        cases.append(Case(path_case))
+                        cases.add_case(Case(path_case))
                         break
 
-print(f"{len(cases)} case directories found:")
+print(f"{len(cases)} cases found:")
 for case in cases:
-    print("   " + case.path)
+    print("\n   " + case.name)
+    print("      DC-bias:", case.dc_bias)
+    print("      custom wavefroms:", case.contains_custom)
+    print("      phase:", case.cwaveform_phase)
 
 
+cases.get_value_pair("cwaveform_phase", "dc_bias")
