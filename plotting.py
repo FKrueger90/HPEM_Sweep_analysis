@@ -1,14 +1,15 @@
 import matplotlib.pyplot as plt
+import os
 
 
 # plotting presets
 def set_plot_globals():
     plt.rcParams['agg.path.chunksize'] = 10000
-    #plt.rcParams['mathtext.fontset'] = 'stix'
-    #plt.rcParams['font.family'] = 'STIXGeneral'
     plt.rcParams['font.size'] = 16
 
-def plot_dc_bias_over_phase(xy):
+
+def plot_dc_bias_over_phase(xy, path_figures, name=''):
+    path_save = os.path.join(path_figures, "DCBias_Phase")
     x = xy[0]
     y = xy[1]
     fig, ax = plt.subplots()
@@ -21,4 +22,5 @@ def plot_dc_bias_over_phase(xy):
     ax.set_ylabel("DC Self-Bias (V)")
     ax.set_title("DC Self-Bias")
     plt.tight_layout()
-    plt.show()
+    plt.savefig(path_save, dpi=600)
+    plt.close()

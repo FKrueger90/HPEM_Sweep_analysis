@@ -1,32 +1,66 @@
-import os, re
+import os
+import re
 import numpy as np
 import math
 import matplotlib.pyplot as plt
 from scipy import ndimage
+from classes import Case
 
 np.set_printoptions(threshold=100000)
 np.set_printoptions(precision=3)
 
 
-def movie2xt(name, path_movie1, path_save, freq, num_zones=0):
+def movie2xt(case, path_save, lower_half=True):
     """
     generates XT plot(s) of the Efield in z-direction.
     It uses finds tecplot movie files and generates the plots based on the "R"-averaged values
 
     Args:
-        path_movie1 (str): path to movie.1.plt file
+        case (Case): path to movie.1.plt file
         path_save:
-        num_zones:
-        freq: fundamental frequency (MHz)
-        name (str): case name
     """
-    title = name + "_XT_Efield"
+    title = case.name + "_XT_Efield"
+    path_movie1 = case.path_movie1
+    freq = case.freq*1e-6
+    mesh = case.mesh
+    cwafer = case.cwafer
+    num_zones = case.rffac + 1
 
-    # cells borders used for averaging area
-    cell_boarder_bottom = 34
-    cell_boarder_top = 50
-    cell_boarder_left = 0
-    cell_boarder_right = 80
+    # find area for averaging
+    # ---------------------------------------------------
+    # default cell borders used for averaging area
+    if mesh is None or cwafer is None:
+        cell_boarder_bottom = 34
+        cell_boarder_top = 50
+        cell_boarder_left = 0
+        cell_boarder_right = 80
+    else:
+        # find wafer width
+        for num_line, line in enumerate(mesh[::-1]):
+            if any(item in line for item in cwafer):
+                cell_boarder_left = len(line)
+                for num_cell, cell in enumerate(line):
+                    if cell in cwafer:
+                        if num_cell < cell_boarder_left:
+                            cell_boarder_left = num_cell
+                        cell_boarder_right = num_cell
+                    else:
+                        break
+        print(f"wafer: {cell_boarder_left} - {cell_boarder_right}")
+
+        # find electrode gap cells
+        lines_bulk = []
+        for num_line, line in enumerate(mesh[::-1]):
+            if list(line[cell_boarder_left:cell_boarder_right]) == ['0'] * (cell_boarder_right - cell_boarder_left):
+                lines_bulk.append(num_line)
+        cell_boarder_top = max(lines_bulk)
+        cell_boarder_bottom = min(lines_bulk)
+
+        # only consider lower half
+        if lower_half:
+            cell_boarder_top = cell_boarder_bottom + int((cell_boarder_top - cell_boarder_bottom)/2)
+
+        print(f"bulk area: {cell_boarder_bottom} - {cell_boarder_top}")
 
     v_max = 50
     v_min = -v_max
@@ -123,13 +157,16 @@ def movie2xt(name, path_movie1, path_save, freq, num_zones=0):
     plt.colorbar()
     plt.xlabel(r"time ($\mu$s)")
     plt.ylabel('x (cm)')
-    plt.tick_params(axis='both', which='both', labelcolor="black", tickdir='in', right=True)
+    plt.tick_params(axis='both', which='both', labelcolor="black", tickdir='in', right=True, top=True)
     plt.title(title)
     y = np.linspace(0, 3.0, XT.shape[0])
     x = np.linspace(0, 1, XT.shape[1])
-    contour = plt.contour(x, y, XT, colors='gray', levels=[0.0],
+
+    # add zero contour
+    if (XT > 0).any():
+        contour = plt.contour(x, y, XT, colors='gray', levels=[0.0],
                           linestyles=['dashed', 'dashdot', 'dotted'], linewidths=1)
-    plt.clabel(contour, inline=True, fontsize=8, fmt='%1.0f')
+        plt.clabel(contour, inline=True, fontsize=8, fmt='%1.0f')
 
     if 'path_save' in locals():
         path_figure = path_save + f"\\{title}.png"
@@ -139,5 +176,4 @@ def movie2xt(name, path_movie1, path_save, freq, num_zones=0):
 
         print(f"figure saved to {path_figure}\n")
 
-    # plt.show()
     plt.close()
