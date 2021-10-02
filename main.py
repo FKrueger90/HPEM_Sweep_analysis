@@ -14,6 +14,7 @@ dir_root = os.path.abspath("D:\\temp\\2000_2000")
 
 # initialize case list object
 cases = Cases()
+# generate case objects by scanning the root folder
 cases.scan_directory_for_cases(dir_root)
 
 print(f"{len(cases)} cases found:")
@@ -32,6 +33,10 @@ path_figures = os.path.join(dir_root, "Figures")
 if not os.path.isdir(path_figures):
     os.mkdir(path_figures)
 
+path_figures_XT_Field = os.path.join(path_figures, "_XT_Field")
+if not os.path.isdir(path_figures_XT_Field):
+    os.mkdir(path_figures_XT_Field)
+
 # set global plot parameters
 plotting.set_plot_globals()
 
@@ -41,5 +46,6 @@ if not cases.constant_phase:
     plotting.plot_dc_bias_over_phase(xy_phase_bias, path_figures)
 
 # create XT-plots of Efield
+print("\ncreating E-field XT plots...")
 for case in cases:
-    movie2xt(case, path_figures, lower_half=True)
+    movie2xt(case, path_figures_XT_Field, lower_half=True)

@@ -3,6 +3,7 @@ import re
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from scipy import ndimage
 from classes import Case
 
@@ -10,14 +11,14 @@ np.set_printoptions(threshold=100000)
 np.set_printoptions(precision=3)
 
 
-def movie2xt(case, path_save, lower_half=True):
+def movie2xt(case, path_figure, lower_half=True):
     """
     generates XT plot(s) of the Efield in z-direction.
     It uses finds tecplot movie files and generates the plots based on the "R"-averaged values
 
     Args:
         case (Case): path to movie.1.plt file
-        path_save:
+        path_figure:
     """
     title = case.name + "_XT_Efield"
     path_movie1 = case.path_movie1
@@ -25,6 +26,8 @@ def movie2xt(case, path_save, lower_half=True):
     mesh = case.mesh
     cwafer = case.cwafer
     num_zones = case.rffac + 1
+
+    gap = 3
 
     # find area for averaging
     # ---------------------------------------------------
@@ -46,7 +49,6 @@ def movie2xt(case, path_save, lower_half=True):
                         cell_boarder_right = num_cell
                     else:
                         break
-        print(f"wafer: {cell_boarder_left} - {cell_boarder_right}")
 
         # find electrode gap cells
         lines_bulk = []
@@ -59,8 +61,7 @@ def movie2xt(case, path_save, lower_half=True):
         # only consider lower half
         if lower_half:
             cell_boarder_top = cell_boarder_bottom + int((cell_boarder_top - cell_boarder_bottom)/2)
-
-        print(f"bulk area: {cell_boarder_bottom} - {cell_boarder_top}")
+            gap = gap/2
 
     v_max = 50
     v_min = -v_max
@@ -152,14 +153,15 @@ def movie2xt(case, path_save, lower_half=True):
 
     # plot heatmap
     # --------------------------------------------------------------------
+
     plt.imshow(XT, cmap='jet', interpolation='bicubic', origin='lower', vmax=v_max, vmin=v_min,
-               extent=[0, 1 / freq, 0, 3.0], aspect=0.25)
+               extent=[0, 1 / freq, 0, gap], aspect="auto")
     plt.colorbar()
     plt.xlabel(r"time ($\mu$s)")
     plt.ylabel('x (cm)')
     plt.tick_params(axis='both', which='both', labelcolor="black", tickdir='in', right=True, top=True)
     plt.title(title)
-    y = np.linspace(0, 3.0, XT.shape[0])
+    y = np.linspace(0, gap, XT.shape[0])
     x = np.linspace(0, 1, XT.shape[1])
 
     # add zero contour
@@ -168,12 +170,61 @@ def movie2xt(case, path_save, lower_half=True):
                           linestyles=['dashed', 'dashdot', 'dotted'], linewidths=1)
         plt.clabel(contour, inline=True, fontsize=8, fmt='%1.0f')
 
-    if 'path_save' in locals():
-        path_figure = path_save + f"\\{title}.png"
-        if not os.path.isdir(path_save):
-            os.mkdir(path_save)
-        plt.savefig(path_figure, dpi=600)
-
-        print(f"figure saved to {path_figure}\n")
-
+    if 'path_figure' in locals():
+        path_save = path_figure + f"\\{title}.png"
+        if not os.path.isdir(path_figure):
+            os.mkdir(path_figure)
+        plt.savefig(path_save, dpi=600)
+        print(f"   figure saved to {path_save}")
     plt.close()
+
+    # plot with waveform:
+    # ---------------------------------------------------------------------------------
+    fig = plt.figure()
+    # setup grid
+    gs = gridspec.GridSpec(2, 2, height_ratios=[4, 1], width_ratios=[20, 1])
+    gs.update(wspace=0.025, hspace=0.05)
+    ax1 = plt.subplot(gs[0, 0])
+    ax2 = plt.subplot(gs[1, 0], sharex=ax1)
+    ax3 = plt.subplot(gs[:, 1])
+    # ax setup
+    plt.setp(ax1.get_xticklabels(), visible=False)
+    plt.setp(ax2.get_yticklabels(), visible=False)
+    ax1.tick_params(axis='both', which='both', labelcolor="black", tickdir='in', right=True, top=True)
+    ax2.tick_params(axis='both', which='both', labelcolor="black", tickdir='in', right=True, top=True)
+    ax2.tick_params(axis='y', right=False, left=False)
+
+    # plot heatmap
+    img = ax1.imshow(XT, cmap='jet', interpolation='bicubic', origin='lower', vmax=v_max, vmin=v_min,
+                     extent=[0, 1 / freq, 0, gap], aspect='auto')
+
+    # add zero contour
+    if (XT > 0).any():
+        contour = ax1.contour(x, y, XT, colors='gray', levels=[0.0],
+                              linestyles=['dashed', 'dashdot', 'dotted'], linewidths=1)
+        plt.clabel(contour, inline=True, fontsize=8, fmt='%1.0f')
+
+    # generate waveform
+    X = np.linspace(0, 1, 401)
+    if case.contains_custom:
+        Y = np.zeros(401)
+        for i, harm in enumerate(case.custom_relharm):
+            k = harm
+            phi = case.custom_phase[i]
+            Y += case.custom_relamp[i]*np.cos(2*k*np.pi*X + k*np.pi + phi/180*np.pi)
+    else:
+        Y = -np.sin(2*np.pi*X)
+    ax2.plot(X, Y)
+    plt.colorbar(img, cax=ax3)
+    ax2.set_xlabel(r"time ($\mu$s)")
+    ax1.set_ylabel('x (cm)')
+    plt.tick_params(axis='both', which='both', labelcolor="black", tickdir='in', right=True, top=True)
+    fig.suptitle(title, fontsize=16)
+
+    if 'path_figure' in locals():
+        path_save = path_figure + f"\\{title}_waveform.png"
+        if not os.path.isdir(path_figure):
+            os.mkdir(path_figure)
+        plt.savefig(path_save, dpi=600)
+    plt.close()
+    print(f"   figure saved to {path_save}")

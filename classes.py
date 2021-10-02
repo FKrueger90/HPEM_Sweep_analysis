@@ -120,7 +120,7 @@ class Cases:
         self.constant_phase = const_phase
 
         # print sweep metrics
-        print("\nanalyzing sweet metrics:\n-----------------------------------")
+        print("\nanalyzing sweep metrics:\n-----------------------------------")
         if const_power:
             print("constant power:")
             for i, p in enumerate(powers[0]):
@@ -160,6 +160,9 @@ class Case:
         self.restart = int(self.find_nam_parameter("IRESTART"))
         self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))
         self.contains_custom = self.icustom != [0] * len(self.icustom)
+        self.custom_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))
+        self.custom_relharm = eval(self.find_nam_parameter("CUSTOM_RELHARM"))
+        self.custom_relamp = eval(self.find_nam_parameter("CUSTOM_RELAMP"))
         self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]
         self.rffac = int(float(self.find_nam_parameter("RFFAC")))
         self.freq = float(self.find_nam_parameter("FREQ"))
