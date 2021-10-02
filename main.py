@@ -6,11 +6,18 @@ from classes import Cases, Case
 
 np.set_printoptions(threshold=100000)
 
+# config
+# ------------------------------------------------------------------------
+XT_colorbar = False # show color-bars in XT-plots
+
 # root directory
 # dir_root = os.path.abspath("C:\\Users\\flori\\Desktop\\temp2\\ConstVoltage_200_1000")
 #dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\Voltage_Waveform_Tailoring\HPEM\ArCF4O2\DarkSpaceGeometry\ConstVoltage_200_1000")
-# dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2\\DarkSpaceGeometry\\2000_2000")
-dir_root = os.path.abspath("D:\\temp\\2000_2000")
+dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2\\DarkSpaceGeometry\\1000_1000")
+#dir_root = os.path.abspath("D:\\temp\\2000_2000")
+
+# script body
+# ------------------------------------------------------------------------
 
 # initialize case list object
 cases = Cases()
@@ -48,4 +55,4 @@ if not cases.constant_phase:
 # create XT-plots of Efield
 print("\ncreating E-field XT plots...")
 for case in cases:
-    movie2xt(case, path_figures_XT_Field, lower_half=True)
+    movie2xt(case, path_figures_XT_Field, lower_half=True, do_color_bar=XT_colorbar)

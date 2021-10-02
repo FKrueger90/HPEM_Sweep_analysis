@@ -11,7 +11,7 @@ np.set_printoptions(threshold=100000)
 np.set_printoptions(precision=3)
 
 
-def movie2xt(case, path_figure, lower_half=True):
+def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     """
     generates XT plot(s) of the Efield in z-direction.
     It uses finds tecplot movie files and generates the plots based on the "R"-averaged values
@@ -215,7 +215,15 @@ def movie2xt(case, path_figure, lower_half=True):
     else:
         Y = -np.sin(2*np.pi*X)
     ax2.plot(X, Y)
-    plt.colorbar(img, cax=ax3)
+
+    # add color bar
+    if do_color_bar:
+        plt.colorbar(img, cax=ax3)
+    else:
+        ax3.axis("off")
+
+
+    # axis labels
     ax2.set_xlabel(r"time ($\mu$s)")
     ax1.set_ylabel('x (cm)')
     plt.tick_params(axis='both', which='both', labelcolor="black", tickdir='in', right=True, top=True)
