@@ -8,14 +8,14 @@ np.set_printoptions(threshold=100000)
 
 # config
 # ------------------------------------------------------------------------
-XT_colorbar = False # show color-bars in XT-plots
-XT_lower_half = False
+XT_colorbar = False  # show color-bars in XT-plots
+XT_lower_half = False  # only show bottom half of XT plots
+
+IEAD_max_energy = 3000  # max energy for IEAD in eV (None if not used)
 
 # root directory
-# dir_root = os.path.abspath("C:\\Users\\flori\\Desktop\\temp2\\ConstVoltage_200_1000")
-dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\Voltage_Waveform_Tailoring\HPEM\ArCF4O2\OldGeometry\\500W_top\\500_1000")
-#dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2\\OldGeometry\\500W_top\\500_2000r2")
-#dir_root = os.path.abspath("D:\\temp\\2000_2000")
+dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2"
+                           "\\DarkSpaceGeometry\\2000_3000r1")
 
 # script body
 # ------------------------------------------------------------------------
@@ -40,9 +40,13 @@ path_figures = os.path.join(dir_root, "Figures")
 if not os.path.isdir(path_figures):
     os.mkdir(path_figures)
 
-path_figures_XT_Field = os.path.join(path_figures, "_XT_Field")
+path_figures_XT_Field = os.path.join(path_figures, "XT_Field")
 if not os.path.isdir(path_figures_XT_Field):
     os.mkdir(path_figures_XT_Field)
+
+path_figures_IEAD = os.path.join(path_figures, "IEAD")
+if not os.path.isdir(path_figures_IEAD):
+    os.mkdir(path_figures_IEAD)
 
 # set global plot parameters
 plotting.set_plot_globals()
@@ -54,12 +58,12 @@ if not cases.constant_phase:
 
 # load pcmc data
 for case in cases:
-    if case.path_pcmc != None:
+    if case.path_pcmc is not None:
         case.read_pcmc_file()
-        plotting.plot_EAD(case)
+        plotting.plot_ead(case, path_figures_IEAD, iead_max_energy=IEAD_max_energy, plot_species="ION-TOT")
 
 
-# create XT-plots of Efield
+# create XT-plots of E-field
 print("\ncreating E-field XT plots...")
 for case in cases:
     movie2xt(case, path_figures_XT_Field, lower_half=XT_lower_half, do_color_bar=XT_colorbar)

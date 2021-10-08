@@ -3,6 +3,238 @@ import re
 import numpy as np
 import pylab as pl
 
+class Case:
+    def __init__(self, path):
+        self.path = path
+        self.name = os.path.basename(path)
+        self.path_nam = self.find_file_by_name(".nam", [])
+        self.path_log = self.find_file_by_name(".log", ["runscript"])
+        self.path_out = self.find_file_by_name(".out", ["gmon", "mcs.", "mesh."])
+        self.path_movie1 = self.find_file_by_name("movie1.pdt")
+        self.path_mesh = self.find_file_by_name("mesh.dat")
+        self.path_pcmc = self.find_file_by_name("pcmc.prof")
+        self.mesh = self.read_mesh_file(self.path_mesh)
+        # pcmc data
+        self.pcmc_species = []
+        self.pcmc_eads = []
+        self.pcmc_max_angle = (None, None)                                    # max pcmc angle tuple: (ions, neutrals)
+        self.pcmc_max_energy = (None, None)                                  # max pcmc energy tuple: (ions, neutrals)
+        self.irfpow = int(eval(self.find_nam_parameter("IRFPOW")))           # adjust voltages for power target
+        self.powerICP = 0
+        self.powerCCP1 = 0
+        self.powerCCP2 = 0
+        self.cwafer = list(eval(self.find_nam_parameter("CWAFER")))              # wafer materials
+        self.metal_labels = list(eval(self.find_nam_parameter("CMETAL")))        # metal material labels
+        self.final_voltages = self.get_final_voltages()                          # voltage amplitudes on last iteration
+        self.rfpnorma = list(eval(self.find_nam_parameter("RFPNORMA")))
+        self.dc_bias = eval(self.find_out_parameter("DC BIAS"))
+        self.ne_ave = eval(self.find_out_parameter("AVERAGE ELECTRON DENSITY"))
+        self.restart = int(self.find_nam_parameter("IRESTART"))
+        self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))
+        self.contains_custom = self.icustom != [0] * len(self.icustom)
+        self.custom_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))
+        self.custom_relharm = eval(self.find_nam_parameter("CUSTOM_RELHARM"))
+        self.custom_relamp = eval(self.find_nam_parameter("CUSTOM_RELAMP"))
+        self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]
+        self.rffac = int(float(self.find_nam_parameter("RFFAC")))
+        self.freq = float(self.find_nam_parameter("FREQ"))
+
+    def find_file_by_name(self, str_match, str_exclude=[]):
+        """
+        searches case folder for file, matching base on filename
+        check parent directory if not found
+
+        Args:
+            str_match: string to match
+            str_exclude: string to exclude
+
+        Returns:
+            Path to file or "None" if not found
+
+        """
+        # loop over files in case directory
+        for name_file in os.listdir(self.path):
+            if str_match in name_file.lower() and not any(x in name_file.lower() for x in str_exclude):
+                return os.path.join(self.path, name_file)
+        abspath = os.path.abspath(self.path)
+        uppath = os.path.dirname(os.path.abspath(self.path))
+        print(abspath)
+        print(uppath)
+        for name_file in os.listdir(uppath):
+            if str_match in name_file.lower() and not any(x in name_file.lower() for x in str_exclude):
+                return os.path.join(uppath, name_file)
+
+        print(f"\033[91mcould not find file matching '{str_match}'\033[0m")
+
+        return None
+
+    def find_nam_parameter(self, str_match, multiple_values=False):
+
+        with open(self.path_nam, 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                if re.search(rf' *{str_match} *=', line):
+                    if "!" in line:
+                        parameter = re.findall(r'= *(.*)(?=,*\s*\!)', line)[0]
+                    else:
+                        parameter = re.findall(r'= *(.*)(?=,*\s*$)', line)[0]
+                    # remove leading and trailing whitespaces
+                    parameter = parameter.strip()
+                    # remove last ',' symbol if present
+                    if parameter[-1] == ",":
+                        parameter = parameter[:-1]
+                    return parameter
+        return None
+
+    def find_out_parameter(self, str_match):
+        with open(self.path_out, 'r') as f:
+            lines = f.readlines()
+            for line in lines[::-1]:
+                if re.search(rf' *{str_match} *', line):
+
+                    parameter = re.findall(rf' *{str_match} *(.*) ', line)[0]
+                    return parameter
+        return None
+
+    def get_final_voltages(self):
+        voltages = []
+        for num_metal, metal in enumerate(self.metal_labels):
+            parameter = 0
+            with open(self.path_out, 'r') as f:
+                lines = f.readlines()
+                for line in lines[::-1]:
+                    regex = rf' +{metal} +\d\.\d\d\dE\+\d\d  +(\d\.\d\d\dE\+\d\d) +'
+                    if re.search(regex, line):
+                        parameter = eval(re.findall(regex, line)[0])
+                        break
+            voltages.append(parameter)
+        return voltages
+
+    def read_mesh_file(self, path_mesh):
+        with open(path_mesh) as f:
+            mesh = []
+            lines = f.readlines()
+            for line in lines:
+                reg_phrase_end = r"^[\t\s]*\*+[\t\s]*"
+                if re.search(reg_phrase_end, line):
+                    break
+                reg_phrase_start = r"[\t\s]*#*\*+"
+                if re.search(reg_phrase_start, line):
+                    continue
+                mesh.append(list(line[1:].rstrip()))
+        mesh = np.array(mesh)
+        return mesh
+
+    def read_pcmc_file(self, normalize_theta=True):
+
+        # check if path to pcmc file is set. if not, return None
+        if self.path_pcmc is None:
+            print("pcmc file not found! IEAD ad EEAD plotting aborted")
+            return None, None
+
+        print("reading pcmc file:")
+        print("species:")
+
+        # initialize lists
+        pcmc_species = []
+        pcmc_eads = []
+        # find formatting
+        with open(self.path_pcmc) as f:
+            reg_phrase = r"[\t\s]*(\d+)[\t\s]+(\d+\.\d+E[+-]\d+)[\t\s]+(\d+\.\d+E[+-]\d+)"
+            lines = f.readlines()
+            num_lines_matched = 0
+            for num_line, line in enumerate(lines):
+                if re.search(reg_phrase, line):
+                    num_lines_matched += 1
+                    results = re.search(reg_phrase, line).groups()
+                    if num_lines_matched == 1:
+                        pcmc_angle_num_bins = eval(results[0])
+                        pcmc_angle_max_neutrals = eval(results[1])
+                        pcmc_angle_max_ions = eval(results[2])
+                        self.pcmc_max_angle = (pcmc_angle_max_ions, pcmc_angle_max_neutrals)
+
+                    if num_lines_matched == 2:
+                        pcmc_energy_num_bins = eval(results[0])
+                        pcmc_energy_max_neutrals = eval(results[1])
+                        pcmc_energy_max_ions = eval(results[2])
+                        self.pcmc_max_energy = (pcmc_energy_max_ions, pcmc_energy_max_neutrals)
+
+                    if num_lines_matched >= 2:
+                        pcmc_line_header_end = num_line+2
+                        break
+
+        # read data:
+        # ----------------------------------------------------------------------
+        # initialize lists
+        with open(self.path_pcmc) as f:
+            reg_phrase_exp = r"(\d+\.\d+E[+-]\d+)"
+            #lines = f.readlines()[pcmc_line_header_end:]
+            num_species_found = 0
+            # skip header lines
+            for i in range(pcmc_line_header_end):
+                next(f)
+            # loop over lines
+            for line in f:
+                # find species line ( if line does not start with space )
+                if line[0] != " ":
+                    if num_species_found > 0:
+                        pcmc_eads.append(np.array(rows))
+                    name_species = line.strip()
+                    pcmc_species.append(name_species)
+                    num_species_found += 1
+                    rows = []
+                    row = []
+                    print(f"   {name_species}")
+                    continue
+
+                # find exponential numbers in line
+                numbers_found = re.findall(reg_phrase_exp, line)
+                if numbers_found:
+                    for n in numbers_found:
+                        if len(row) < pcmc_energy_num_bins:
+                            row.append(eval(n))
+                        if len(row) == pcmc_energy_num_bins:
+                            rows.append(row)
+                            row = []
+            # add eads to list after last iteration
+            pcmc_eads.append(np.array(rows))
+
+            # add to Case object (modified)
+            self.pcmc_species = pcmc_species
+
+            # normalize magnitude to total flux
+            normalize_magnitude = False
+            if normalize_magnitude:
+                for i, ead in enumerate(pcmc_eads):
+                    pcmc_eads[i] = ead / sum(ead)
+
+            # reshape
+            for i, array in enumerate(pcmc_eads):
+                height, width = array.shape
+                array[0:int(height / 2), :] = np.flipud(array[0:int(height / 2), :])
+                array = array.transpose()
+                pcmc_eads[i] = array
+
+        # normalize theta by solid angle
+        if normalize_theta:
+            dthi = pcmc_angle_max_ions/pcmc_angle_num_bins
+            dthn = pcmc_angle_max_ions/pcmc_angle_num_bins
+            THIM = np.zeros(pcmc_angle_num_bins)
+            factors = []
+            for i, j in enumerate(THIM):
+                THIM[i] = (dthi*(i+1))
+                factors.append(dthi*np.sin(THIM[i]*3.141592/180.))
+            factors = factors[::-1] + factors
+
+            for i, ead in enumerate(pcmc_eads):
+                for angle_bin in range(90):
+                    ead[:, angle_bin] = ead[:, angle_bin] / factors[angle_bin]
+                pcmc_eads[i] = ead#/sum(ead)
+
+        self.pcmc_eads = pcmc_eads
+
+        return pcmc_species, pcmc_eads
+
 
 class Cases:
     def __init__(self):
@@ -11,7 +243,12 @@ class Cases:
         self.constant_power = None
         self.constant_phase = None
 
-    def __getitem__(self, i):
+    def __getitem__(self, i) -> Case:
+        """
+
+        Returns:
+            Case: 
+        """
         return self.cases[i]
 
     def add_case(self, case):
@@ -138,206 +375,3 @@ class Cases:
                 print(f"   phase shift: {p} °")
 
 
-class Case:
-    def __init__(self, path):
-        self.path = path
-        self.name = os.path.basename(path)
-        self.path_nam = self.find_file_by_name(".nam", [])
-        self.path_log = self.find_file_by_name(".log", ["runscript"])
-        self.path_out = self.find_file_by_name(".out", ["gmon", "mcs.", "mesh."])
-        self.path_movie1 = self.find_file_by_name("movie1.pdt")
-        self.path_mesh = self.find_file_by_name("mesh.dat")
-        self.path_pcmc = self.find_file_by_name("pcmc.prof")
-        self.mesh = self.read_mesh_file(self.path_mesh)
-        # pcmc data
-        self.pcmc_species = []
-        self.pcmc_eads = []
-        self.pcmc_max_angle = (None, None)                                    # max pcmc angle tuple: (ions, neutrals)
-        self.pcmc_max_energy = (None, None)                                  # max pcmc energy tuple: (ions, neutrals)
-        self.irfpow = int(eval(self.find_nam_parameter("IRFPOW")))           # adjust voltages for power target
-        self.powerICP = 0
-        self.powerCCP1 = 0
-        self.powerCCP2 = 0
-        self.cwafer = list(eval(self.find_nam_parameter("CWAFER")))              # wafer materials
-        self.metal_labels = list(eval(self.find_nam_parameter("CMETAL")))        # metal material labels
-        self.final_voltages = self.get_final_voltages()                          # voltage amplitudes on last iteration
-        self.rfpnorma = list(eval(self.find_nam_parameter("RFPNORMA")))
-        self.dc_bias = eval(self.find_out_parameter("DC BIAS"))
-        self.ne_ave = eval(self.find_out_parameter("AVERAGE ELECTRON DENSITY"))
-        self.restart = int(self.find_nam_parameter("IRESTART"))
-        self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))
-        self.contains_custom = self.icustom != [0] * len(self.icustom)
-        self.custom_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))
-        self.custom_relharm = eval(self.find_nam_parameter("CUSTOM_RELHARM"))
-        self.custom_relamp = eval(self.find_nam_parameter("CUSTOM_RELAMP"))
-        self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]
-        self.rffac = int(float(self.find_nam_parameter("RFFAC")))
-        self.freq = float(self.find_nam_parameter("FREQ"))
-
-    def find_file_by_name(self, str_match, str_exclude=[]):
-        """
-        searches case folder for file, matching base on filename
-        check parent directory if not found
-
-        Args:
-            str_match: string to match
-            str_exclude: string to exclude
-
-        Returns:
-            Path to file or "None" if not found
-
-        """
-        # loop over files in case directory
-        for name_file in os.listdir(self.path):
-            if str_match in name_file.lower() and not any(x in name_file.lower() for x in str_exclude):
-                return os.path.join(self.path, name_file)
-        abspath = os.path.abspath(self.path)
-        uppath = os.path.dirname(os.path.abspath(self.path))
-        print(abspath)
-        print(uppath)
-        for name_file in os.listdir(uppath):
-            if str_match in name_file.lower() and not any(x in name_file.lower() for x in str_exclude):
-                return os.path.join(uppath, name_file)
-
-        print(f"\033[91mcould not find file matching '{str_match}'\033[0m")
-
-        return None
-
-    def find_nam_parameter(self, str_match, multiple_values=False):
-
-        with open(self.path_nam, 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                if re.search(rf' *{str_match} *=', line):
-                    if "!" in line:
-                        parameter = re.findall(r'= *(.*)(?=,*\s*\!)', line)[0]
-                    else:
-                        parameter = re.findall(r'= *(.*)(?=,*\s*$)', line)[0]
-                    # remove leading and trailing whitespaces
-                    parameter = parameter.strip()
-                    # remove last ',' symbol if present
-                    if parameter[-1] == ",":
-                        parameter = parameter[:-1]
-                    return parameter
-        return None
-
-    def find_out_parameter(self, str_match):
-        with open(self.path_out, 'r') as f:
-            lines = f.readlines()
-            for line in lines[::-1]:
-                if re.search(rf' *{str_match} *', line):
-
-                    parameter = re.findall(rf' *{str_match} *(.*) ', line)[0]
-                    return parameter
-        return None
-
-    def get_final_voltages(self):
-        voltages = []
-        for num_metal, metal in enumerate(self.metal_labels):
-            parameter = 0
-            with open(self.path_out, 'r') as f:
-                lines = f.readlines()
-                for line in lines[::-1]:
-                    regex = rf' +{metal} +\d\.\d\d\dE\+\d\d  +(\d\.\d\d\dE\+\d\d) +'
-                    if re.search(regex, line):
-                        parameter = eval(re.findall(regex, line)[0])
-                        break
-            voltages.append(parameter)
-        return voltages
-
-    def read_mesh_file(self, path_mesh):
-        with open(path_mesh) as f:
-            mesh = []
-            lines = f.readlines()
-            for line in lines:
-                reg_phrase_end = r"^[\t\s]*\*+[\t\s]*"
-                if re.search(reg_phrase_end, line):
-                    break
-                reg_phrase_start = r"[\t\s]*#*\*+"
-                if re.search(reg_phrase_start, line):
-                    continue
-                mesh.append(list(line[1:].rstrip()))
-        mesh = np.array(mesh)
-        return mesh
-
-    def read_pcmc_file(self):
-
-        # check if path to pcmc file is set. if not, return None
-        if self.path_pcmc is None:
-            print("pcmc file not found! IEAD ad EEAD plotting aborted")
-            return None, None
-
-        print("reading pcmc file:")
-        print("species:")
-
-        pcmc_species = []
-        pcmc_eads = []
-        # find formatting
-        with open(self.path_pcmc) as f:
-            reg_phrase = r"[\t\s]*(\d+)[\t\s]+(\d+\.\d+E[+-]\d+)[\t\s]+(\d+\.\d+E[+-]\d+)"
-            lines = f.readlines()
-            num_lines_matched = 0
-            for num_line, line in enumerate(lines):
-                if re.search(reg_phrase, line):
-                    num_lines_matched += 1
-                    results = re.search(reg_phrase, line).groups()
-                    if num_lines_matched == 1:
-                        pcmc_angle_num_bins = eval(results[0])
-                        pcmc_angle_max_neutrals = eval(results[1])
-                        pcmc_angle_max_ions = eval(results[2])
-                        self.pcmc_max_angle = (pcmc_angle_max_ions, pcmc_angle_max_neutrals)
-
-                    if num_lines_matched == 2:
-                        pcmc_energy_num_bins = eval(results[0])
-                        pcmc_energy_max_neutrals = eval(results[1])
-                        pcmc_energy_max_ions = eval(results[2])
-                        self.pcmc_max_energy = (pcmc_energy_max_ions, pcmc_energy_max_neutrals)
-
-                    if num_lines_matched >= 2:
-                        pcmc_line_header_end = num_line+2
-                        break
-
-        # read Species data:
-        rows = []
-        row = []
-        with open(self.path_pcmc) as f:
-            reg_phrase_exp = r"(\d+\.\d+E[+-]\d+)"
-            reg_phrase_species = r"[^\.]"
-            lines = f.readlines()[pcmc_line_header_end:]
-            num_species_found = 0
-            for line in lines:
-
-                # find species line ( if line does not contain '.' )
-                if "." not in line:
-                    if num_species_found > 0:
-                        pcmc_eads.append(np.array(rows))
-                    name_species = line.strip()
-                    pcmc_species.append(name_species)
-                    num_species_found += 1
-                    rows = []
-                    row = []
-                    print(f"   {name_species}")
-
-                if re.search(reg_phrase_exp, line):
-                    numbers_in_line = re.findall(reg_phrase_exp, line)
-                    for n in numbers_in_line:
-
-                        if len(row) < pcmc_energy_num_bins:
-                            row.append(eval(n))
-                        if len(row) == pcmc_energy_num_bins:
-                            rows.append(row)
-                            row = []
-            # add eads to list after last iteration
-            pcmc_eads.append(np.array(rows))
-
-            # add to Case object (modified)
-
-            self.pcmc_species = pcmc_species
-
-            for array in pcmc_eads:
-                height, width = array.shape
-                array[0:int(height / 2), :] = np.flipud(array[0:int(height / 2), :])
-                array = array.transpose()
-                self.pcmc_eads.append(array)
-
-        return pcmc_species, pcmc_eads
