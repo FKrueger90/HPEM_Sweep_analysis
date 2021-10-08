@@ -9,11 +9,12 @@ np.set_printoptions(threshold=100000)
 # config
 # ------------------------------------------------------------------------
 XT_colorbar = False # show color-bars in XT-plots
+XT_lower_half = False
 
 # root directory
 # dir_root = os.path.abspath("C:\\Users\\flori\\Desktop\\temp2\\ConstVoltage_200_1000")
-#dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\Voltage_Waveform_Tailoring\HPEM\ArCF4O2\DarkSpaceGeometry\ConstVoltage_200_1000")
-dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2\\DarkSpaceGeometry\\1000_1000")
+dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\Voltage_Waveform_Tailoring\HPEM\ArCF4O2\OldGeometry\\500W_top\\500_1000")
+#dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2\\OldGeometry\\500W_top\\500_2000r2")
 #dir_root = os.path.abspath("D:\\temp\\2000_2000")
 
 # script body
@@ -23,7 +24,6 @@ dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HP
 cases = Cases()
 # generate case objects by scanning the root folder
 cases.scan_directory_for_cases(dir_root)
-
 print(f"{len(cases)} cases found:")
 for case in cases:
     print("\n   " + case.name)
@@ -52,7 +52,14 @@ if not cases.constant_phase:
     xy_phase_bias = cases.get_value_pair("cwaveform_phase", "dc_bias", custom_waveform_only=True)
     plotting.plot_dc_bias_over_phase(xy_phase_bias, path_figures)
 
+# load pcmc data
+for case in cases:
+    if case.path_pcmc != None:
+        case.read_pcmc_file()
+        plotting.plot_EAD(case)
+
+
 # create XT-plots of Efield
 print("\ncreating E-field XT plots...")
 for case in cases:
-    movie2xt(case, path_figures_XT_Field, lower_half=True, do_color_bar=XT_colorbar)
+    movie2xt(case, path_figures_XT_Field, lower_half=XT_lower_half, do_color_bar=XT_colorbar)

@@ -63,7 +63,7 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
             cell_boarder_top = cell_boarder_bottom + int((cell_boarder_top - cell_boarder_bottom)/2)
             gap = gap/2
 
-    v_max = 50
+    v_max = 100
     v_min = -v_max
 
     # find dimensions of Tecplot file

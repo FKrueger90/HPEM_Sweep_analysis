@@ -1,6 +1,7 @@
 import os
 import re
 import numpy as np
+import pylab as pl
 
 
 class Cases:
@@ -146,8 +147,14 @@ class Case:
         self.path_out = self.find_file_by_name(".out", ["gmon", "mcs.", "mesh."])
         self.path_movie1 = self.find_file_by_name("movie1.pdt")
         self.path_mesh = self.find_file_by_name("mesh.dat")
+        self.path_pcmc = self.find_file_by_name("pcmc.prof")
         self.mesh = self.read_mesh_file(self.path_mesh)
-        self.irfpow = int(eval(self.find_nam_parameter("IRFPOW")))               # adjust voltages for power target
+        # pcmc data
+        self.pcmc_species = []
+        self.pcmc_eads = []
+        self.pcmc_max_angle = (None, None)                                    # max pcmc angle tuple: (ions, neutrals)
+        self.pcmc_max_energy = (None, None)                                  # max pcmc energy tuple: (ions, neutrals)
+        self.irfpow = int(eval(self.find_nam_parameter("IRFPOW")))           # adjust voltages for power target
         self.powerICP = 0
         self.powerCCP1 = 0
         self.powerCCP2 = 0
@@ -252,3 +259,85 @@ class Case:
                 mesh.append(list(line[1:].rstrip()))
         mesh = np.array(mesh)
         return mesh
+
+    def read_pcmc_file(self):
+
+        # check if path to pcmc file is set. if not, return None
+        if self.path_pcmc is None:
+            print("pcmc file not found! IEAD ad EEAD plotting aborted")
+            return None, None
+
+        print("reading pcmc file:")
+        print("species:")
+
+        pcmc_species = []
+        pcmc_eads = []
+        # find formatting
+        with open(self.path_pcmc) as f:
+            reg_phrase = r"[\t\s]*(\d+)[\t\s]+(\d+\.\d+E[+-]\d+)[\t\s]+(\d+\.\d+E[+-]\d+)"
+            lines = f.readlines()
+            num_lines_matched = 0
+            for num_line, line in enumerate(lines):
+                if re.search(reg_phrase, line):
+                    num_lines_matched += 1
+                    results = re.search(reg_phrase, line).groups()
+                    if num_lines_matched == 1:
+                        pcmc_angle_num_bins = eval(results[0])
+                        pcmc_angle_max_neutrals = eval(results[1])
+                        pcmc_angle_max_ions = eval(results[2])
+                        self.pcmc_max_angle = (pcmc_angle_max_ions, pcmc_angle_max_neutrals)
+
+                    if num_lines_matched == 2:
+                        pcmc_energy_num_bins = eval(results[0])
+                        pcmc_energy_max_neutrals = eval(results[1])
+                        pcmc_energy_max_ions = eval(results[2])
+                        self.pcmc_max_energy = (pcmc_energy_max_ions, pcmc_energy_max_neutrals)
+
+                    if num_lines_matched >= 2:
+                        pcmc_line_header_end = num_line+2
+                        break
+
+        # read Species data:
+        rows = []
+        row = []
+        with open(self.path_pcmc) as f:
+            reg_phrase_exp = r"(\d+\.\d+E[+-]\d+)"
+            reg_phrase_species = r"[^\.]"
+            lines = f.readlines()[pcmc_line_header_end:]
+            num_species_found = 0
+            for line in lines:
+
+                # find species line ( if line does not contain '.' )
+                if "." not in line:
+                    if num_species_found > 0:
+                        pcmc_eads.append(np.array(rows))
+                    name_species = line.strip()
+                    pcmc_species.append(name_species)
+                    num_species_found += 1
+                    rows = []
+                    row = []
+                    print(f"   {name_species}")
+
+                if re.search(reg_phrase_exp, line):
+                    numbers_in_line = re.findall(reg_phrase_exp, line)
+                    for n in numbers_in_line:
+
+                        if len(row) < pcmc_energy_num_bins:
+                            row.append(eval(n))
+                        if len(row) == pcmc_energy_num_bins:
+                            rows.append(row)
+                            row = []
+            # add eads to list after last iteration
+            pcmc_eads.append(np.array(rows))
+
+            # add to Case object (modified)
+
+            self.pcmc_species = pcmc_species
+
+            for array in pcmc_eads:
+                height, width = array.shape
+                array[0:int(height / 2), :] = np.flipud(array[0:int(height / 2), :])
+                array = array.transpose()
+                self.pcmc_eads.append(array)
+
+        return pcmc_species, pcmc_eads
