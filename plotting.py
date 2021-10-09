@@ -62,6 +62,27 @@ def plot_dc_bias_over_phase(xy, path_figures):
     plt.close()
 
 
+def plot_voltages_over_phase(xy_voltage1, xy_voltage2, xy_dc_bias, path_figures):
+    path_save = os.path.join(path_figures, "Voltages")
+
+    fig, ax = plt.subplots()
+    ax.plot(xy_voltage1[0], xy_voltage1[1])
+    ax.scatter(xy_voltage1[0], xy_voltage1[1])
+    ax.plot(xy_voltage2[0], xy_voltage2[1])
+    ax.scatter(xy_voltage2[0], xy_voltage2[1])
+    ax.plot(xy_dc_bias[0], xy_dc_bias[1])
+    ax.scatter(xy_dc_bias[0], xy_dc_bias[1])
+    ax.set_xlim(0, 180)
+    ax.set_xticks(xy_voltage1[0])
+    ax.tick_params(direction='in', right=True, top=True)
+    ax.set_xlabel("Phase angle (°)")
+    ax.set_ylabel("Voltage (V)")
+    ax.set_title("Voltages")
+    plt.tight_layout()
+    plt.savefig(path_save, dpi=600)
+    plt.close()
+
+
 def plot_ead(case, path_figures_iead, iead_max_energy=None, plot_species='ION-TOT'):
     """
 
@@ -103,4 +124,3 @@ def plot_ead(case, path_figures_iead, iead_max_energy=None, plot_species='ION-TO
     file_name = "IEAD_" + plot_species + "_" + case.name
     path_file = os.path.join(path_figures_iead, file_name)
     plt.savefig(path_file)
-    plt.show()

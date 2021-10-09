@@ -3,6 +3,7 @@ import re
 import numpy as np
 import pylab as pl
 
+
 class Case:
     def __init__(self, path):
         self.path = path
@@ -245,6 +246,9 @@ class Cases:
 
     def __getitem__(self, i) -> Case:
         """
+
+        Args:
+            i (int): case index
 
         Returns:
             Case: 

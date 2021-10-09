@@ -2,7 +2,8 @@ import os
 import numpy as np
 from Movie2XT import movie2xt
 import plotting
-from classes import Cases, Case
+from classes import Cases
+#from classes import Case
 
 np.set_printoptions(threshold=100000)
 
@@ -55,6 +56,10 @@ if not cases.constant_phase:
     # DC bias Plot
     xy_phase_bias = cases.get_value_pair("cwaveform_phase", "dc_bias", custom_waveform_only=True)
     plotting.plot_dc_bias_over_phase(xy_phase_bias, path_figures)
+    # plot voltages
+    xy_phase_voltage1 = cases.get_value_pair("cwaveform_phase", "final_voltages[0]", custom_waveform_only=True)
+    xy_phase_voltage2 = cases.get_value_pair("cwaveform_phase", "final_voltages[1]", custom_waveform_only=True)
+    plotting.plot_voltages_over_phase(xy_phase_voltage1, xy_phase_voltage2, xy_phase_bias, path_figures)
 
 # load pcmc data
 for case in cases:
