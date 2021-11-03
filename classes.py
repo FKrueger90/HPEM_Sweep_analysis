@@ -1,11 +1,13 @@
 import os
 import re
 import numpy as np
+import math
 import pylab as pl
 
 
 class Case:
     def __init__(self, path):
+        # file information
         self.path = path
         self.name = os.path.basename(path)
         self.path_nam = self.find_file_by_name(".nam", [])
@@ -14,31 +16,39 @@ class Case:
         self.path_movie1 = self.find_file_by_name("movie1.pdt")
         self.path_mesh = self.find_file_by_name("mesh.dat")
         self.path_pcmc = self.find_file_by_name("pcmc.prof")
-        self.mesh = self.read_mesh_file(self.path_mesh)
+        self.mesh = self.read_mesh_file()
         # pcmc data
-        self.pcmc_species = []
-        self.pcmc_eads = []
-        self.pcmc_max_angle = (None, None)                                    # max pcmc angle tuple: (ions, neutrals)
-        self.pcmc_max_energy = (None, None)                                  # max pcmc energy tuple: (ions, neutrals)
+        self.pcmc_species = []                                              # names of pcmc species
+        self.pcmc_eads = []                                                 # particle energy-angle distributions
+        self.pcmc_max_angle = (None, None)                                  # max pcmc angle tuple: (ions, neutrals)
+        self.pcmc_max_energy = (None, None)                                 # max pcmc energy tuple: (ions, neutrals)
+        # power and voltage setup
         self.irfpow = int(eval(self.find_nam_parameter("IRFPOW")))           # adjust voltages for power target
         self.powerICP = 0
         self.powerCCP1 = 0
         self.powerCCP2 = 0
+        self.rfpnorma = list(eval(self.find_nam_parameter("RFPNORMA")))        # target power
+        self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))          # use of custom waveforms
+        self.contains_custom = self.icustom != [0] * len(self.icustom)         # flag if case contains custom waveforms
+        self.custom_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))      # phase of harmonics
+        self.custom_relharm = eval(self.find_nam_parameter("CUSTOM_RELHARM"))  # relative orders of harmonics
+        self.custom_relamp = eval(self.find_nam_parameter("CUSTOM_RELAMP"))    # relative amplitude of harmonics
+        self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]
+        # material data
         self.cwafer = list(eval(self.find_nam_parameter("CWAFER")))              # wafer materials
         self.metal_labels = list(eval(self.find_nam_parameter("CMETAL")))        # metal material labels
+        # quantities after convergence
         self.final_voltages = self.get_final_voltages()                          # voltage amplitudes on last iteration
-        self.rfpnorma = list(eval(self.find_nam_parameter("RFPNORMA")))
         self.dc_bias = eval(self.find_out_parameter("DC BIAS"))
         self.ne_ave = eval(self.find_out_parameter("AVERAGE ELECTRON DENSITY"))
         self.restart = int(self.find_nam_parameter("IRESTART"))
-        self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))
-        self.contains_custom = self.icustom != [0] * len(self.icustom)
-        self.custom_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))
-        self.custom_relharm = eval(self.find_nam_parameter("CUSTOM_RELHARM"))
-        self.custom_relamp = eval(self.find_nam_parameter("CUSTOM_RELAMP"))
-        self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]
         self.rffac = int(float(self.find_nam_parameter("RFFAC")))
         self.freq = float(self.find_nam_parameter("FREQ"))
+        # properties of movie file
+        self.movie_I, self.movie_J, self.movie_num_zones = self.movie_find_dimensions()
+        self.potential_over_time = []  # nested list of time varying potential and different locations
+        self.potential_over_time_location = []  # sample locations of time varying potentials
+        self.potential_over_time_labels = []    # sample label of time varying potentials
 
     def find_file_by_name(self, str_match, str_exclude=[]):
         """
@@ -111,8 +121,14 @@ class Case:
             voltages.append(parameter)
         return voltages
 
-    def read_mesh_file(self, path_mesh):
-        with open(path_mesh) as f:
+    def read_mesh_file(self):
+
+        if self.path_mesh is None:
+            print("path to mesh file not found")
+            print("mesh file not read")
+            return None
+
+        with open(self.path_mesh) as f:
             mesh = []
             lines = f.readlines()
             for line in lines:
@@ -235,6 +251,108 @@ class Case:
         self.pcmc_eads = pcmc_eads
 
         return pcmc_species, pcmc_eads
+
+    def movie_find_dimensions(self):
+
+        num_zones = self.rffac + 1
+        # find dimensions of Tecplot file
+        # --------------------------------------------------------------------
+        # find 'I' and 'J' variable list
+        with open(self.path_movie1) as f:
+            for line, row in enumerate(f):
+                # find I
+                if re.search(r'.*I= *([0-9]*),', row):
+                    I = int(re.findall(r'.*I= *([0-9]*),', row)[0])
+                # find J
+                if re.search(r'.*J= *([0-9]*),', row):
+                    J = int(re.findall(r'.*J= *([0-9]*),', row)[0])
+                    break
+
+        # Find max T if not provided
+        if num_zones:
+            Zones = num_zones
+        else:
+            # loop over lines beginning from last
+            for line in reversed(list(open(self.path_movie1))):
+                # fast coarse match
+                if re.search(r'.*?T.*?', line):
+                    # precise match
+                    regexpr = r'.*=\s*(\d+).*$'
+                    if re.search(regexpr, line):
+                        T = re.findall(regexpr, line)[0]
+                        Zones = int(T)
+                        break
+
+        return I, J, Zones
+
+    def get_local_potential_over_time(self, locs, labels):
+        """
+        fetches the local potential at point xy from movie file
+        Args:
+            locs(list): List of tuples of coordinates for probing
+        """
+        # find dimensions of Tecplot file
+        # --------------------------------------------------------------------
+        # find 'PPOT'
+        with open(self.path_movie1) as f:
+            for line, row in enumerate(f):
+                if 'PPOT' in row:
+                    pos_in_zone = line - 2  # no of variable, R and Z omitted starting with 0
+                    break
+
+        I = self.movie_I
+        J = self.movie_J
+        Zones = self.movie_num_zones
+
+        # read in data
+        # --------------------------------------------------------------------
+        LinesPerI = math.ceil(I / 7)
+
+        # find lines of zones
+        lines_zones = []
+        row = []
+        line_I = 0
+        line_I_begin = 0
+        line_I_end = 0
+        array = np.zeros((J, I, Zones))
+        Zone = -1
+        j = 0
+        line_var_begin = 0
+        line_var_end = 0
+        with open(self.path_movie1, "r") as fp:
+            for line, rowtext in enumerate(fp):
+                if 'ZONE' in rowtext:
+
+                    Zone += 1
+                    line_zone = line + 2
+
+                    # because constants X and R are not repeated
+                    line_var_begin = line_zone + (J * LinesPerI * pos_in_zone) + (j * LinesPerI)
+                    if Zone == 0:
+                        line_var_begin = line_zone + (J * LinesPerI * (pos_in_zone + 2)) + (j * LinesPerI)
+                    line_var_end = line_var_begin + LinesPerI * J
+                    line_I_begin = line_var_begin
+                    line_I_end = line_I_begin + LinesPerI
+
+                if line >= line_var_begin and line < line_var_end:
+
+                    if line >= line_I_begin and line < line_I_end:
+                        row.extend([float(x) for x in rowtext.split()])
+
+                    if line == line_I_end - 1:
+                        array[j, :, Zone] = row
+                        j += 1
+                        line_I_begin = line
+                        line_I_end = line_I_begin + LinesPerI + 1
+                        row = []
+                    if j == J:
+                        j = 0
+        if type(locs) is tuple and len(locs) == 2:
+            locs = [locs]
+
+        for loc in locs:
+            self.potential_over_time.append(array[loc[1], loc[0], :])
+        self.potential_over_time_labels = labels
 
 
 class Cases:
@@ -378,4 +496,10 @@ class Cases:
             for i, p in enumerate(phases):
                 print(f"   phase shift: {p} °")
 
-
+    def print_info(self):
+        print(f"{len(self.cases)} cases found:")
+        for case in self.cases:
+            print("\n   " + case.name)
+            print("      DC-bias:", case.dc_bias)
+            print("      custom waveforms:", case.contains_custom)
+            print("      phase:", case.cwaveform_phase)
