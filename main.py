@@ -9,12 +9,16 @@ np.set_printoptions(linewidth=500)
 # config
 # ------------------------------------------------------------------------
 # Energy angular distributions
-plot_EADS = False  # plot particle EADS on surface
+plot_EADS = True  # plot particle EADS on surface
 plot_EADS_species = ("ION-TOT", "E", "CF^")
-IEAD_max_energy = 3000  # max energy for IEAD in eV (None if not used)
-EEAD_max_energy = 100  # max energy for IEAD in eV (None if not used)
+IEAD_max_energy = 3000  # max energy for IEAD plot in eV (None if not used)
+EEAD_max_energy = 100  # max energy for IEAD plot in eV (None if not used)
+
+plot_EDFs = True  # integrated energy distribution functions
+plot_ADFs = True  # integrated energy distribution functions
 
 # electric field XT plots
+plot_XT_Efield = True
 XT_colorbar = False  # show color-bars in XT-plots
 XT_lower_half = False  # only show bottom half of XT plots
 
@@ -60,10 +64,10 @@ if not os.path.isdir(path_figures_time_varying_potentials):
 plotting.set_plot_globals()
 
 if not cases.constant_phase:
-    # DC bias Plot
+    # plot DC bias over phase
     xy_phase_bias = cases.get_value_pair("cwaveform_phase", "dc_bias", custom_waveform_only=True)
     plotting.plot_dc_bias_over_phase(xy_phase_bias, path_figures)
-    # plot voltages
+    # plot voltage amplitudes over phase
     xy_phase_voltage1 = cases.get_value_pair("cwaveform_phase", "final_voltages[0]", custom_waveform_only=True)
     xy_phase_voltage2 = cases.get_value_pair("cwaveform_phase", "final_voltages[1]", custom_waveform_only=True)
     plotting.plot_voltages_over_phase(xy_phase_voltage1, xy_phase_voltage2, xy_phase_bias, path_figures)
@@ -73,14 +77,20 @@ plotting.plot_geometry(cases, path_figures,
                        plot_local_potential_over_time=plot_local_potential_over_time,
                        potential_over_time_locations=potential_over_time_locations)
 
-# load and plot particle energy, angular distributions
-if plot_EADS:
-    # load pcmc data
-    for case in cases:
-        if case.path_pcmc is not None:
-            case.read_pcmc_file()
+# load particle energy-angular distributions from pcmc file and plot
+if plot_EADS or plot_EDFs or plot_ADFs:
+    cases.read_pcmc_file_all()
+
+    # plot particle energy angular distributions
+    if plot_EADS:
+        for case in cases:
             for s in plot_EADS_species:
                 plotting.plot_ead(case, path_figures_IEAD, iead_max_energy=IEAD_max_energy, plot_species=s)
+    #if plot_EDFs:
+    #    cases.gen
+# plot comparative ion energy distributions
+#for case in Cases:
+#    case.geneate_EDFs()
 
 # load and plot time varying voltages
 if plot_local_potential_over_time:
@@ -90,6 +100,7 @@ if plot_local_potential_over_time:
 
 
 # create XT-plots of E-field
-print("\ncreating E-field XT plots...")
-for case in cases:
-    plotting.movie2xt(case, path_figures_XT_Field, lower_half=XT_lower_half, do_color_bar=XT_colorbar)
+if plot_XT_Efield:
+    print("\ncreating E-field XT plots...")
+    for case in cases:
+        plotting.movie2xt(case, path_figures_XT_Field, lower_half=XT_lower_half, do_color_bar=XT_colorbar)

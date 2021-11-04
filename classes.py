@@ -27,26 +27,26 @@ class Case:
         self.powerICP = 0
         self.powerCCP1 = 0
         self.powerCCP2 = 0
-        self.rfpnorma = list(eval(self.find_nam_parameter("RFPNORMA")))        # target power
-        self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))          # use of custom waveforms
-        self.contains_custom = self.icustom != [0] * len(self.icustom)         # flag if case contains custom waveforms
-        self.custom_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))      # phase of harmonics
-        self.custom_relharm = eval(self.find_nam_parameter("CUSTOM_RELHARM"))  # relative orders of harmonics
-        self.custom_relamp = eval(self.find_nam_parameter("CUSTOM_RELAMP"))    # relative amplitude of harmonics
-        self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]
+        self.rfpnorma = list(eval(self.find_nam_parameter("RFPNORMA")))          # target power
+        self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))            # use of custom waveforms
+        self.contains_custom = self.icustom != [0] * len(self.icustom)           # contains custom waveforms flag
+        self.custom_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))        # phase of harmonics
+        self.custom_relharm = eval(self.find_nam_parameter("CUSTOM_RELHARM"))    # relative orders of harmonics
+        self.custom_relamp = eval(self.find_nam_parameter("CUSTOM_RELAMP"))      # relative amplitude of harmonics
+        self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]  # relative phase of harmonics
         # material data
         self.cwafer = list(eval(self.find_nam_parameter("CWAFER")))              # wafer materials
         self.metal_labels = list(eval(self.find_nam_parameter("CMETAL")))        # metal material labels
         # quantities after convergence
         self.final_voltages = self.get_final_voltages()                          # voltage amplitudes on last iteration
-        self.dc_bias = eval(self.find_out_parameter("DC BIAS"))
-        self.ne_ave = eval(self.find_out_parameter("AVERAGE ELECTRON DENSITY"))
-        self.restart = int(self.find_nam_parameter("IRESTART"))
-        self.rffac = int(float(self.find_nam_parameter("RFFAC")))
-        self.freq = float(self.find_nam_parameter("FREQ"))
+        self.dc_bias = eval(self.find_out_parameter("DC BIAS"))                  # DC self-bias on last iteration
+        self.ne_ave = eval(self.find_out_parameter("AVERAGE ELECTRON DENSITY"))  # average n_e on last iteration
+        self.restart = int(self.find_nam_parameter("IRESTART"))                  # IRESTART .nam-value
+        self.rffac = int(float(self.find_nam_parameter("RFFAC")))                # RFFAC .nam-value
+        self.freq = float(self.find_nam_parameter("FREQ"))                       # FREQ .nam-value
         # properties of movie file
         self.movie_I, self.movie_J, self.movie_num_zones = self.movie_find_dimensions()
-        self.potential_over_time = []  # nested list of time varying potential and different locations
+        self.potential_over_time = []           # nested list of time varying potential and different locations
         self.potential_over_time_location = []  # sample locations of time varying potentials
         self.potential_over_time_labels = []    # sample label of time varying potentials
 
@@ -252,6 +252,13 @@ class Case:
 
         return pcmc_species, pcmc_eads
 
+    def generate_EDFs(self):
+        """
+        integrates Energy Angular Distributions to generate 1D energy distribution
+        """
+        print(self.pcmc_eads.shape)
+        exit()
+
     def movie_find_dimensions(self):
 
         num_zones = self.rffac + 1
@@ -380,7 +387,12 @@ class Cases:
         return len(self.cases)
 
     def scan_directory_for_cases(self, dir_root):
-
+        """
+        scans directory for cases directories.
+        identified based on the presence of a .log file
+        Args:
+            dir_root (str): root directory for scanning
+        """
         dirs_in_root = os.listdir(dir_root)
 
         print("scanning directory...")
@@ -497,9 +509,27 @@ class Cases:
                 print(f"   phase shift: {p} °")
 
     def print_info(self):
+        """
+        prints basic information about cases
+        """
         print(f"{len(self.cases)} cases found:")
         for case in self.cases:
             print("\n   " + case.name)
             print("      DC-bias:", case.dc_bias)
             print("      custom waveforms:", case.contains_custom)
             print("      phase:", case.cwaveform_phase)
+
+    def read_pcmc_file_all(self):
+        """
+        reads all pcmc data into case objects
+        """
+        for case in self.cases:
+            if case.path_pcmc is not None:
+                case.read_pcmc_file()
+
+    def generate_EDFs_all(self):
+        """
+        generates EDFs for all case objects in "Cases" list
+        """
+        for case in self.cases:
+            case.generate_EDFs()

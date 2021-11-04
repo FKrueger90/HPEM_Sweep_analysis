@@ -417,3 +417,10 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     plt.close()
     print(f"   figure saved to {path_save}")
 
+
+#def plot_EDF_compare(cases, species="ION-TOT"):
+
+#    EDFs = []
+#    EDF_labels = []
+#    for case in cases:
+
