@@ -19,9 +19,12 @@ class Case:
         self.mesh = self.read_mesh_file()
         # pcmc data
         self.pcmc_species = []                                              # names of pcmc species
-        self.pcmc_eads = []                                                 # particle energy-angle distributions
+        self.pcmc_eads = []                                                 # 2D energy-angle distributions
+        self.pcmc_edfs = []                                                 # 1D energy distributions
+        self.pcmc_adfs = []                                                 # 1D angle distributions
         self.pcmc_max_angle = (None, None)                                  # max pcmc angle tuple: (ions, neutrals)
         self.pcmc_max_energy = (None, None)                                 # max pcmc energy tuple: (ions, neutrals)
+        self.pcmc_mean_energy = []                                          # mean particle energies
         # power and voltage setup
         self.irfpow = int(eval(self.find_nam_parameter("IRFPOW")))           # adjust voltages for power target
         self.powerICP = 0
@@ -61,7 +64,6 @@ class Case:
 
         Returns:
             Path to file or "None" if not found
-
         """
         # loop over files in case directory
         for name_file in os.listdir(self.path):
@@ -80,7 +82,16 @@ class Case:
         return None
 
     def find_nam_parameter(self, str_match, multiple_values=False):
+        """
+        finds value of .nam parameter in .nam list file
 
+        Args:
+            str_match (str): string used for name matching
+            multiple_values ():
+
+        Returns:
+
+        """
         with open(self.path_nam, 'r') as f:
             lines = f.readlines()
             for line in lines:
@@ -143,7 +154,15 @@ class Case:
         return mesh
 
     def read_pcmc_file(self, normalize_theta=True):
+        """
+        reads energy angular distribution from pcmc file
+        Args:
+            normalize_theta (bool): flag for the normalization based on solid angle
 
+        Returns:
+            array containing EADS and list of found species
+
+        """
         # check if path to pcmc file is set. if not, return None
         if self.path_pcmc is None:
             print("pcmc file not found! IEAD ad EEAD plotting aborted")
@@ -256,8 +275,37 @@ class Case:
         """
         integrates Energy Angular Distributions to generate 1D energy distribution
         """
-        print(self.pcmc_eads.shape)
-        exit()
+        for ead in self.pcmc_eads:
+            edf = np.sum(ead, axis=1)
+            edf = edf/sum(edf)
+            self.pcmc_edfs.append(edf)
+
+    def get_mean_energies(self):
+        """
+        determines mean particle energy of  pcmc species
+        """
+        if self.pcmc_edfs == []:
+            return
+
+        for i, edf in enumerate(self.pcmc_edfs):
+            energy_mean = 0
+            print("shape", edf.shape)
+            scale_energy = np.linspace(0,self.pcmc_max_energy[0], num=edf.shape[0])
+            for j, e in enumerate(scale_energy):
+                energy_mean += e * edf[j]
+            energy_mean =  energy_mean / np.sum(edf)
+            self.pcmc_mean_energy.append(energy_mean)
+            print("species: ", self.pcmc_species[i])
+            print("mean energy:", self.pcmc_mean_energy[i])
+
+    def generate_ADFs(self):
+        """
+        integrates Energy Angular Distributions to generate 1D angular distribution
+        """
+        for ead in self.pcmc_eads:
+            adf = np.sum(ead, axis=1)
+            adf = adf/sum(adf)
+            self.pcmc_edfs.append(adf)
 
     def movie_find_dimensions(self):
 
@@ -519,17 +567,18 @@ class Cases:
             print("      custom waveforms:", case.contains_custom)
             print("      phase:", case.cwaveform_phase)
 
-    def read_pcmc_file_all(self):
+    def read_pcmc_file_all(self, generate_EDFs, generate_ADFs):
         """
         reads all pcmc data into case objects
+        optional generation of 1D energy distribution and/or 1D angular distribution
+
+        Args:
+            generate_EDFs (bool): flag for generation of EDF
+            generate_ADFs (bool): flag for generation of ADF
         """
         for case in self.cases:
             if case.path_pcmc is not None:
                 case.read_pcmc_file()
-
-    def generate_EDFs_all(self):
-        """
-        generates EDFs for all case objects in "Cases" list
-        """
-        for case in self.cases:
-            case.generate_EDFs()
+            if generate_EDFs:
+                case.generate_EDFs()
+                case.get_mean_energies()

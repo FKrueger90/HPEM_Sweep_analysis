@@ -14,6 +14,13 @@ np.set_printoptions(precision=3)
 
 
 def colormap_tecplot_modern(num_levels=100):
+    """
+    colormap reproducing the 'Tecplot Modern' color map
+    Args:
+        num_levels(int): number of levels
+    Returns:
+        colormap object
+    """
     # tecplot modern colormap
     color_dict = {'red': [[0, 1.0, 1.0],
                           [1 / 7, 1.0, 35.0 / 255],
@@ -45,8 +52,10 @@ def colormap_tecplot_modern(num_levels=100):
     return colormap_modern
 
 
-# plotting presets
 def set_plot_globals():
+    """
+    sets global plotting presets
+    """
     plt.style.use('classic')
     plt.rcParams['agg.path.chunksize'] = 10000
     plt.rcParams['font.size'] = 16
@@ -60,6 +69,12 @@ def set_plot_globals():
 
 
 def plot_dc_bias_over_phase(xy, path_figures):
+    """
+    plots dc self bias as a function of custom waveform pase
+    Args:
+        xy:
+        path_figures:
+    """
     path_save = os.path.join(path_figures, "DCBias_Phase")
     x = xy[0]
     y = xy[1]
@@ -78,6 +93,15 @@ def plot_dc_bias_over_phase(xy, path_figures):
 
 
 def plot_voltages_over_phase(xy_voltage1, xy_voltage2, xy_dc_bias, path_figures):
+    """
+    plots voltages amplitudes as a function of custom voltage phase shift for 1 or 2 electrode setup
+    Args:
+        xy_voltage1 (tuple of lists): tuple of lists containing voltage1 amplitudes and phases
+        xy_voltage2 (tuple of lists): tuple of lists containing voltage2 amplitudes and phases
+        xy_dc_bias (tuple of lists): tuple of lists containing dc self-bias and phases
+        path_figures (str): path to figures directory
+    """
+    # file path for saved image
     path_save = os.path.join(path_figures, "Voltages")
 
     fig, ax = plt.subplots()
@@ -98,17 +122,51 @@ def plot_voltages_over_phase(xy_voltage1, xy_voltage2, xy_dc_bias, path_figures)
     plt.close()
 
 
-def plot_ead(case, path_figures_iead, iead_max_energy=None, plot_species='ION-TOT'):
+def plot_mean_energies_over_phase(cases, path_figures, species_plot="ION-TOT"):
     """
 
+    Args:
+        cases (Cases): Case container object
+        path_figures (str): path to figures directory
+        species_plot (str): species of which the mean energies are plotted
+    """
+    # file path for saved image
+    path_save = os.path.join(path_figures, "Mean_Energy")
+
+    # fetch date from case objects
+    mean_energies = []
+    phases = []
+    for case in cases:
+        for i, species in enumerate(case.pcmc_species):
+            if species == species_plot:
+                mean_energies.append(case.pcmc_mean_energy[i])
+                break
+        phases.append(case.custom_phase[1])
+
+    # sort lists based on phase
+    phases, mean_energies = (list(t) for t in zip(*sorted(zip(phases, mean_energies))))
+
+    plt.figure()
+    plt.plot(phases, mean_energies,  marker="o")
+    print(phases)
+    print(mean_energies)
+    plt.xlabel("Phase angle (°)")
+    plt.ylabel("Mean Energy (eV)")
+    plt.title("Mean Energy")
+    # save figure
+    plt.savefig(path_save, dpi=600)
+    plt.close()
+    exit()
+
+
+def plot_ead(case, path_figures_iead, iead_max_energy=None, plot_species='ION-TOT'):
+    """
+    plots 2D ion energy-angular distributions of species 'plot_species' and saves them to 'path_figures_iead'
     Args:
         case (Case): case object
         path_figures_iead (str): path to IEAD figure directory
         iead_max_energy (int): max energy of IEADs
         plot_species (str): name of species to plot
-
-    Returns:
-
     """
     pos_plot_species = None
     for i, species in enumerate(case.pcmc_species):
@@ -155,7 +213,7 @@ def plot_voltages_over_time(case, path_figure):
     path_save = os.path.join(path_figure, "Potentials_over_Time" + case.name)
     fig, ax = plt.subplots()
     time_bins = case.potential_over_time[0].shape[0]
-    time = np.linspace(0, 1e6/case.freq, time_bins )
+    time = np.linspace(0, 1e6/case.freq, time_bins)
     for i, potential in enumerate(case.potential_over_time):
         plt.plot(time, potential, label=case.potential_over_time_labels[i])
 
@@ -178,9 +236,6 @@ def plot_geometry(cases, path_figures, plot_local_potential_over_time=False, pot
         path_figures (str): path to figure save directory
         plot_local_potential_over_time (bool): flag for adding potential probe points to plot
         potential_over_time_locations (list[tuple]): list of tuples defining the locations of probe points
-
-    Returns:
-
     """
     # check if all meshes are identical
     meshes_identical = True
@@ -217,6 +272,8 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     It uses finds tecplot movie files and generates the plots based on the "R"-averaged values
 
     Args:
+        lower_half (bool): plot only ower half of reactor
+        do_color_bar (bool): show color bar in plot
         case (Case): path to movie.1.plt file
         path_figure:
     """
@@ -281,7 +338,7 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
 
     # read in data
     # --------------------------------------------------------------------
-    LinesPerI = math.ceil(I / 7)
+    lines_per_i = math.ceil(I / 7)
 
     # find lines of zones
     lines_zones = []
@@ -302,12 +359,12 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
                 line_zone = line + 2
 
                 # because constants X and R are not repeated
-                line_var_begin = line_zone + (J * LinesPerI * pos_in_zone) + (j * LinesPerI)
+                line_var_begin = line_zone + (J * lines_per_i * pos_in_zone) + (j * lines_per_i)
                 if Zone == 0:
-                    line_var_begin = line_zone + (J * LinesPerI * (pos_in_zone + 2)) + (j * LinesPerI)
-                line_var_end = line_var_begin + LinesPerI * J
+                    line_var_begin = line_zone + (J * lines_per_i * (pos_in_zone + 2)) + (j * lines_per_i)
+                line_var_end = line_var_begin + lines_per_i * J
                 line_I_begin = line_var_begin
-                line_I_end = line_I_begin + LinesPerI
+                line_I_end = line_I_begin + lines_per_i
 
             if line >= line_var_begin and line < line_var_end:
 
@@ -318,7 +375,7 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
                     array[j, :, Zone] = row
                     j += 1
                     line_I_begin = line
-                    line_I_end = line_I_begin + LinesPerI + 1
+                    line_I_end = line_I_begin + lines_per_i + 1
                     row = []
                 if j == J:
                     j = 0
@@ -348,7 +405,7 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     # add zero contour
     if (XT > 0).any():
         contour = plt.contour(x, y, XT, colors='gray', levels=[0.0],
-                          linestyles=['dashed', 'dashdot', 'dotted'], linewidths=1)
+                              linestyles=['dashed', 'dashdot', 'dotted'], linewidths=1)
         plt.clabel(contour, inline=True, fontsize=8, fmt='%1.0f')
 
     if 'path_figure' in locals():
@@ -418,9 +475,48 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     print(f"   figure saved to {path_save}")
 
 
-#def plot_EDF_compare(cases, species="ION-TOT"):
+def plot_EDF_compare(cases, path_figures, custom_waveform_only=False, species="ION-TOT"):
+    """
+    plots all edfs of cases in a single comparative plot
+    optional: only plot cases containing custom voltage waveforms
+    Args:
+        cases (Cases): Cases object containing cases to be plotted
+        custom_waveform_only(bool): only plot cases containing custom voltage waveforms
+        species(str): single species to be plotted
+    """
+    # path for saved image
+    path_save = os.path.join(path_figures, "EDF_compare")
 
-#    EDFs = []
-#    EDF_labels = []
-#    for case in cases:
+    # find energy bin limit
+    xmax=0
+    for case in cases:
+        if case.pcmc_max_energy[0] > xmax:
+            xmax = case.pcmc_max_energy[0]
+
+    plt.figure()
+    # loop over all cases
+    bin_e_max = 0  # highest non zero energy bin (used for finding axis limits)
+    for case in cases:
+        # check if case is to be added
+        if not custom_waveform_only or case.custom_phase:
+            # find correct species in EDF list
+            for i, edf in enumerate(case.pcmc_edfs):
+                if case.pcmc_species[i] == species:
+                    y = case.pcmc_edfs[i]
+                    # find max non zero probability energy
+                    for bin_e, val in enumerate(y):
+                        if val == 0:
+                            if bin_e > bin_e_max:
+                                bin_e_max = bin_e
+                            break
+                    x = np.linspace(start=0, stop=case.pcmc_max_energy[0], num=case.pcmc_edfs[i].shape[0])
+                    plt.plot(x, y, label=case.name)
+                    plt.xlim(0,x[bin_e_max]*1.1)
+
+    plt.xlabel("Energy (eV)")
+    plt.ylabel("Relative frequency")
+    plt.title("Ion energy distribution")
+    # save figure
+    plt.savefig(path_save, dpi=600)
+    plt.close()
 
