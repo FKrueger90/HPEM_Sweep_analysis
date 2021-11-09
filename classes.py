@@ -2,7 +2,56 @@ import os
 import re
 import numpy as np
 import math
-import pylab as pl
+
+
+class Config:
+    def __init__(self, locals_config):
+        """
+        Contains the configuration variables of the run analysis
+        Args:
+            locals_config (dict): locals() variable set where values are extracted from
+        """
+        # Energy angular distributions
+        self.plot_EADS = self.get_var_from_locals(locals_config, "plot_EADS")
+        self.plot_EDFs = self.get_var_from_locals(locals_config, "plot_EDFs")
+        self.plot_ADFs = self.get_var_from_locals(locals_config, "plot_ADFs")
+        self.plot_EADS_species = self.get_var_from_locals(locals_config, "plot_EADS_species")
+        self.IEAD_max_energy = self.get_var_from_locals(locals_config, "IEAD_max_energy")
+        self.EEAD_max_energy = self.get_var_from_locals(locals_config, "EEAD_max_energy")
+
+        # electric field XT plots
+        self.plot_XT_Efield = self.get_var_from_locals(locals_config, "plot_XT_Efield")
+        self.XT_colorbar = self.get_var_from_locals(locals_config, "XT_colorbar")
+        self.XT_lower_half = self.get_var_from_locals(locals_config, "XT_lower_half")
+
+        # probe potential over time
+        self.plot_local_potential_over_time = self.get_var_from_locals(locals_config, "plot_local_potential_over_time")
+        self.potential_over_time_locations = self.get_var_from_locals(locals_config, "potential_over_time_locations")
+        self.potential_over_time_labels = self.get_var_from_locals(locals_config, "potential_over_time_labels")
+
+        # config path
+        self.dir_root = self.get_var_from_locals(locals_config, "dir_root")
+
+    @staticmethod
+    def get_var_from_locals(locals_config, variable):
+        """
+        fetch and return variable from locals() dictionary
+        Args:
+            locals_config (dict): dictionary containing config variables ( locals() )
+            variable (str): name of variable to be fetched
+        """
+        if variable in locals_config:
+            return locals_config[variable]
+        else:
+            return None
+
+    def print_config(self):
+        """
+        prints information regarding the config object
+        """
+        print("Configuration:  ")
+        for attribute in self.__dict__:
+            print(f"{attribute}  = {self.__dict__[attribute]}")
 
 
 class Case:
@@ -49,11 +98,12 @@ class Case:
         self.freq = float(self.find_nam_parameter("FREQ"))                       # FREQ .nam-value
         # properties of movie file
         self.movie_I, self.movie_J, self.movie_num_zones = self.movie_find_dimensions()
+        self.potential_xt = []                  # XT data of potential
         self.potential_over_time = []           # nested list of time varying potential and different locations
         self.potential_over_time_location = []  # sample locations of time varying potentials
         self.potential_over_time_labels = []    # sample label of time varying potentials
 
-    def find_file_by_name(self, str_match, str_exclude=[]):
+    def find_file_by_name(self, str_match, str_exclude=None):
         """
         searches case folder for file, matching base on filename
         check parent directory if not found
@@ -65,6 +115,11 @@ class Case:
         Returns:
             Path to file or "None" if not found
         """
+        # type checking
+        if str_exclude is None:
+            str_exclude = []
+        if type(str_exclude) == str:
+            str_exclude = [str_exclude]
         # loop over files in case directory
         for name_file in os.listdir(self.path):
             if str_match in name_file.lower() and not any(x in name_file.lower() for x in str_exclude):
@@ -97,7 +152,7 @@ class Case:
             for line in lines:
                 if re.search(rf' *{str_match} *=', line):
                     if "!" in line:
-                        parameter = re.findall(r'= *(.*)(?=,*\s*\!)', line)[0]
+                        parameter = re.findall(r'= *(.*)(?=,*\s*!)', line)[0]
                     else:
                         parameter = re.findall(r'= *(.*)(?=,*\s*$)', line)[0]
                     # remove leading and trailing whitespaces
@@ -109,6 +164,11 @@ class Case:
         return None
 
     def find_out_parameter(self, str_match):
+        """
+        finds and returns value of parameter in out file
+        Args:
+            str_match (str): match string
+        """
         with open(self.path_out, 'r') as f:
             lines = f.readlines()
             for line in lines[::-1]:
@@ -119,6 +179,11 @@ class Case:
         return None
 
     def get_final_voltages(self):
+        """
+        extracts final voltages from .out file
+        Returns:
+            list[float]: final voltage amplitudes
+        """
         voltages = []
         for num_metal, metal in enumerate(self.metal_labels):
             parameter = 0
@@ -133,7 +198,11 @@ class Case:
         return voltages
 
     def read_mesh_file(self):
+        """
 
+        Returns:
+            np.ndarray: 2D array containing the mesh geometry
+        """
         if self.path_mesh is None:
             print("path to mesh file not found")
             print("mesh file not read")
@@ -168,8 +237,9 @@ class Case:
             print("pcmc file not found! IEAD ad EEAD plotting aborted")
             return None, None
 
-        print("reading pcmc file:")
-        print("species:")
+        print(f"   Case: {self.name}")
+        print(f"   File path: {self.path_pcmc}")
+        print(f"   Species:\n     ", end='')
 
         # initialize lists
         pcmc_species = []
@@ -204,7 +274,6 @@ class Case:
         # initialize lists
         with open(self.path_pcmc) as f:
             reg_phrase_exp = r"(\d+\.\d+E[+-]\d+)"
-            #lines = f.readlines()[pcmc_line_header_end:]
             num_species_found = 0
             # skip header lines
             for i in range(pcmc_line_header_end):
@@ -220,7 +289,7 @@ class Case:
                     num_species_found += 1
                     rows = []
                     row = []
-                    print(f"   {name_species}")
+                    print(f"{name_species},  ", end='')
                     continue
 
                 # find exponential numbers in line
@@ -232,6 +301,7 @@ class Case:
                         if len(row) == pcmc_energy_num_bins:
                             rows.append(row)
                             row = []
+            print("\n")
             # add eads to list after last iteration
             pcmc_eads.append(np.array(rows))
 
@@ -254,24 +324,23 @@ class Case:
         # normalize theta by solid angle
         if normalize_theta:
             dthi = pcmc_angle_max_ions/pcmc_angle_num_bins
-            dthn = pcmc_angle_max_ions/pcmc_angle_num_bins
-            THIM = np.zeros(pcmc_angle_num_bins)
+            thim = np.zeros(pcmc_angle_num_bins)
             factors = []
-            for i, j in enumerate(THIM):
-                THIM[i] = (dthi*(i+1))
-                factors.append(dthi*np.sin(THIM[i]*3.141592/180.))
+            for i, j in enumerate(thim):
+                thim[i] = (dthi*(i+1))
+                factors.append(dthi*np.sin(thim[i]*3.141592/180.))
             factors = factors[::-1] + factors
 
             for i, ead in enumerate(pcmc_eads):
                 for angle_bin in range(90):
                     ead[:, angle_bin] = ead[:, angle_bin] / factors[angle_bin]
-                pcmc_eads[i] = ead#/sum(ead)
+                pcmc_eads[i] = ead
 
         self.pcmc_eads = pcmc_eads
 
         return pcmc_species, pcmc_eads
 
-    def generate_EDFs(self):
+    def generate_edfs(self):
         """
         integrates Energy Angular Distributions to generate 1D energy distribution
         """
@@ -284,21 +353,25 @@ class Case:
         """
         determines mean particle energy of  pcmc species
         """
-        if self.pcmc_edfs == []:
+
+        # check if pcmc_edfs are found in case object
+        if not self.pcmc_edfs:
             return
 
+        # loop over edfs
         for i, edf in enumerate(self.pcmc_edfs):
+            # generate energy scale
+            scale_energy = np.linspace(0, float(self.pcmc_max_energy[0]), num=edf.shape[0])
+            # compute mean energy
             energy_mean = 0
-            print("shape", edf.shape)
-            scale_energy = np.linspace(0,self.pcmc_max_energy[0], num=edf.shape[0])
             for j, e in enumerate(scale_energy):
                 energy_mean += e * edf[j]
-            energy_mean =  energy_mean / np.sum(edf)
+            # normalize
+            energy_mean = energy_mean / np.sum(edf)
+            # append to mean energies list
             self.pcmc_mean_energy.append(energy_mean)
-            print("species: ", self.pcmc_species[i])
-            print("mean energy:", self.pcmc_mean_energy[i])
 
-    def generate_ADFs(self):
+    def generate_adfs(self):
         """
         integrates Energy Angular Distributions to generate 1D angular distribution
         """
@@ -308,8 +381,12 @@ class Case:
             self.pcmc_edfs.append(adf)
 
     def movie_find_dimensions(self):
-
-        num_zones = self.rffac + 1
+        """
+        finds dimensions of the movie file
+        """
+        num_zones = int(self.find_nam_parameter("IMOVIE_FRAMES")) + 1
+        # in tecplot notation, array dimensions are generally I,J,K
+        # here denoted as "idim", "jdim" and "kdim" in order to conform to code style conventions
         # find dimensions of Tecplot file
         # --------------------------------------------------------------------
         # find 'I' and 'J' variable list
@@ -317,15 +394,15 @@ class Case:
             for line, row in enumerate(f):
                 # find I
                 if re.search(r'.*I= *([0-9]*),', row):
-                    I = int(re.findall(r'.*I= *([0-9]*),', row)[0])
+                    idim = int(re.findall(r'.*I= *([0-9]*),', row)[0])
                 # find J
                 if re.search(r'.*J= *([0-9]*),', row):
-                    J = int(re.findall(r'.*J= *([0-9]*),', row)[0])
+                    jdim = int(re.findall(r'.*J= *([0-9]*),', row)[0])
                     break
 
         # Find max T if not provided
         if num_zones:
-            Zones = num_zones
+            return idim, jdim, num_zones
         else:
             # loop over lines beginning from last
             for line in reversed(list(open(self.path_movie1))):
@@ -334,80 +411,97 @@ class Case:
                     # precise match
                     regexpr = r'.*=\s*(\d+).*$'
                     if re.search(regexpr, line):
-                        T = re.findall(regexpr, line)[0]
-                        Zones = int(T)
-                        break
+                        num_zones = int(re.findall(regexpr, line)[0])
+                        return idim, jdim,  num_zones
 
-        return I, J, Zones
-
-    def get_local_potential_over_time(self, locs, labels):
+    def movie_read_to_xt_array(self, quantity):
         """
-        fetches the local potential at point xy from movie file
+        loads xt data of 'quantity into array' and returns it
+
         Args:
-            locs(list): List of tuples of coordinates for probing
+            quantity (str): Name of quantity to read
         """
-        # find dimensions of Tecplot file
-        # --------------------------------------------------------------------
-        # find 'PPOT'
+        # find 'quantity' position in file
+        pos_in_zone = None
         with open(self.path_movie1) as f:
             for line, row in enumerate(f):
-                if 'PPOT' in row:
+                if quantity in row:
                     pos_in_zone = line - 2  # no of variable, R and Z omitted starting with 0
                     break
+        # check if quantity was found
+        if not pos_in_zone:
+            print(f"could not find quantity '{quantity}' in movie file")
+            return None
 
-        I = self.movie_I
-        J = self.movie_J
-        Zones = self.movie_num_zones
+        # in tecplot notation, array dimensions are generally I,J,K
+        # here denoted as "idim", "jdim" and "kdim" in order to conform to code style conventions
+
+        idim = self.movie_I
+        jdim = self.movie_J
+        zones = self.movie_num_zones
 
         # read in data
         # --------------------------------------------------------------------
-        LinesPerI = math.ceil(I / 7)
+        lines_per_i = math.ceil(idim / 7)
 
         # find lines of zones
-        lines_zones = []
         row = []
-        line_I = 0
-        line_I_begin = 0
-        line_I_end = 0
-        array = np.zeros((J, I, Zones))
-        Zone = -1
+        line_i_begin = 0
+        line_i_end = 0
+        array = np.zeros((jdim, idim, zones))
+        zone = -1
         j = 0
         line_var_begin = 0
         line_var_end = 0
         with open(self.path_movie1, "r") as fp:
             for line, rowtext in enumerate(fp):
-                if 'ZONE' in rowtext:
 
-                    Zone += 1
+                if 'ZONE' in rowtext:
+                    zone += 1
                     line_zone = line + 2
 
                     # because constants X and R are not repeated
-                    line_var_begin = line_zone + (J * LinesPerI * pos_in_zone) + (j * LinesPerI)
-                    if Zone == 0:
-                        line_var_begin = line_zone + (J * LinesPerI * (pos_in_zone + 2)) + (j * LinesPerI)
-                    line_var_end = line_var_begin + LinesPerI * J
-                    line_I_begin = line_var_begin
-                    line_I_end = line_I_begin + LinesPerI
+                    line_var_begin = line_zone + (jdim * lines_per_i * pos_in_zone) + (j * lines_per_i)
+                    if zone == 0:
+                        line_var_begin = line_zone + (jdim * lines_per_i * (pos_in_zone + 2)) + (j * lines_per_i)
+                    line_var_end = line_var_begin + lines_per_i * jdim
+                    line_i_begin = line_var_begin
+                    line_i_end = line_i_begin + lines_per_i
 
-                if line >= line_var_begin and line < line_var_end:
+                if line_var_begin <= line < line_var_end:
 
-                    if line >= line_I_begin and line < line_I_end:
+                    if line_i_begin <= line < line_i_end:
                         row.extend([float(x) for x in rowtext.split()])
 
-                    if line == line_I_end - 1:
-                        array[j, :, Zone] = row
+                    if line == line_i_end - 1:
+                        array[j, :, zone] = row
                         j += 1
-                        line_I_begin = line
-                        line_I_end = line_I_begin + LinesPerI + 1
+                        line_i_begin = line
+                        line_i_end = line_i_begin + lines_per_i + 1
                         row = []
-                    if j == J:
+                    if j == jdim:
                         j = 0
+
+        return array
+
+    def get_local_potential_over_time(self, locs, labels):
+        """
+        fetches the local potential at point xy from movie file
+        Args:
+            locs (list of tuple): List of tuples of coordinates for probing
+            labels (list of str): Labels of probe points
+        """
+        if not self.potential_xt:
+            self.potential_xt = self.movie_read_to_xt_array("PPOT")
+
         if type(locs) is tuple and len(locs) == 2:
             locs = [locs]
 
         for loc in locs:
-            self.potential_over_time.append(array[loc[1], loc[0], :])
+            self.potential_over_time.append(self.potential_xt[loc[1], loc[0], :])
         self.potential_over_time_labels = labels
+
+        return
 
 
 class Cases:
@@ -448,7 +542,6 @@ class Cases:
 
             dir_sub = os.path.join(dir_root, dir_in_root)
             # check if file:
-            string_dir_type = "{0:<17}".format("not recognised")
             if os.path.isfile(dir_sub):
                 continue
 
@@ -567,18 +660,19 @@ class Cases:
             print("      custom waveforms:", case.contains_custom)
             print("      phase:", case.cwaveform_phase)
 
-    def read_pcmc_file_all(self, generate_EDFs, generate_ADFs):
+    def read_pcmc_file_all(self, config):
         """
         reads all pcmc data into case objects
         optional generation of 1D energy distribution and/or 1D angular distribution
 
         Args:
-            generate_EDFs (bool): flag for generation of EDF
-            generate_ADFs (bool): flag for generation of ADF
+            config (Config) : config object
         """
+        print("\nreading pcmc files:")
+        print("-" * 80)
         for case in self.cases:
             if case.path_pcmc is not None:
                 case.read_pcmc_file()
-            if generate_EDFs:
-                case.generate_EDFs()
+            if config.plot_EDFs:
+                case.generate_edfs()
                 case.get_mean_energies()

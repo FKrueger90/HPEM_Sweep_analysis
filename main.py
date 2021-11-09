@@ -7,6 +7,7 @@ import os
 import numpy as np
 import plotting
 from classes import Cases
+from classes import Config
 
 # initial output setup
 np.set_printoptions(threshold=np.inf)
@@ -18,11 +19,11 @@ np.set_printoptions(linewidth=500)
 
 # Energy angular distributions
 plot_EADS = True                             # plot particle EADs on surface
+plot_EDFs = True                             # integrated energy distribution functions
+plot_ADFs = True                             # integrated energy distribution functions
 plot_EADS_species = ("ION-TOT", "E", "CF^")  # pcmc species to be plotted
 IEAD_max_energy = 3000                       # max energy for IEAD plot in eV (None if not used)
 EEAD_max_energy = 100                        # max energy for IEAD plot in eV (None if not used)
-plot_EDFs = True                             # integrated energy distribution functions
-plot_ADFs = True                             # integrated energy distribution functions
 
 # electric field XT plots
 plot_XT_Efield = True  # plot XT plot of z vertical electric field component
@@ -35,15 +36,18 @@ potential_over_time_locations = [(40, 20), (40, 45), (40, 67)]
 potential_over_time_labels = ["Bottom", "Bulk", "Top"]
 
 # root directory
-# dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2"
-#                           "\\DarkSpaceGeometry\\2000_3000r2")
-dir_root = os.path.abspath("C:\\Users\\flori\\Desktop\\temp2\\ConstVoltage_200_1000")
+dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2"
+                           "\\DarkSpaceGeometry\\2MHz_Bottom\\2000_2000")
+
+# create config object from locals()
+config = Config(locals())
+config.print_config()
 
 # ╔═══════════════════════════════════════════════════════════════════════════════════╗ #
 # ║   script body                                                                     ║ #
 # ╚═══════════════════════════════════════════════════════════════════════════════════╝ #
 
-# initialize case list object
+# initialize case container object
 cases = Cases()
 # generate case objects by scanning the root folder
 cases.scan_directory_for_cases(dir_root)
@@ -54,22 +58,9 @@ cases.print_info()
 # ║   plotting                                                                        ║ #
 # ╚═══════════════════════════════════════════════════════════════════════════════════╝ #
 
-# generate figure folder if non existent
-path_figures = os.path.join(dir_root, "Figures")
-if not os.path.isdir(path_figures):
-    os.mkdir(path_figures)
-
-path_figures_XT_Field = os.path.join(path_figures, "XT_Field")
-if not os.path.isdir(path_figures_XT_Field):
-    os.mkdir(path_figures_XT_Field)
-
-path_figures_IEAD = os.path.join(path_figures, "IEAD")
-if not os.path.isdir(path_figures_IEAD):
-    os.mkdir(path_figures_IEAD)
-
-path_figures_time_varying_potentials = os.path.join(path_figures, "time_varying_potentials")
-if not os.path.isdir(path_figures_time_varying_potentials):
-    os.mkdir(path_figures_time_varying_potentials)
+# create directories for figures
+path_figures, path_figures_XT_Field, path_figures_IEAD, path_figures_time_varying_potentials \
+    = plotting.create_directories(dir_root, config)
 
 # set global plot parameters
 plotting.set_plot_globals()
@@ -94,8 +85,7 @@ plotting.plot_geometry(cases, path_figures,
 # load particle energy-angular distributions from pcmc file and plot
 # ----------------------------------------------------------------------------
 if plot_EADS or plot_EDFs or plot_ADFs:
-    cases.read_pcmc_file_all(plot_EDFs, plot_ADFs)
-
+    cases.read_pcmc_file_all(config)
 
     # plot particle energy angular distributions
     if plot_EADS:
@@ -111,6 +101,7 @@ if plot_EADS or plot_EDFs or plot_ADFs:
 # load and plot time varying voltages
 # ----------------------------------------------------------------------------
 if plot_local_potential_over_time:
+
     for case in cases:
         case.get_local_potential_over_time(potential_over_time_locations, potential_over_time_labels)
         plotting.plot_voltages_over_time(case, path_figures_time_varying_potentials)
@@ -122,3 +113,6 @@ if plot_XT_Efield:
     print("\ncreating E-field XT plots...")
     for case in cases:
         plotting.movie2xt(case, path_figures_XT_Field, lower_half=XT_lower_half, do_color_bar=XT_colorbar)
+
+# TODO:
+#  fix determine sweep const voltages and power

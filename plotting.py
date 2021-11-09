@@ -3,11 +3,10 @@ import matplotlib.ticker as ticker
 
 import os
 import numpy as np
-import math
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from scipy import ndimage
-from classes import Case, Cases
+from classes import Case, Cases, Config
 
 np.set_printoptions(threshold=100000)
 np.set_printoptions(precision=3)
@@ -50,6 +49,44 @@ def colormap_tecplot_modern(num_levels=100):
     colormap_modern = colors.LinearSegmentedColormap('ColormapTecplot', segmentdata=color_dict, N=num_levels)
 
     return colormap_modern
+
+
+def create_directories(dir_root, config):
+    """
+    checks and creates missing directories for figures
+    Args:
+        dir_root (str) : path to root directory
+        config (Config) : config object
+    Returns:
+        tuple[str] : tuple of figure save directories
+    """
+    # generate figure folder if non existent
+    path_figures = os.path.join(dir_root, "Figures")
+    if not os.path.isdir(path_figures):
+        os.mkdir(path_figures)
+
+    if config.plot_XT_Efield:
+        path_figures_xt_field = os.path.join(path_figures, "XT_Field")
+        if not os.path.isdir(path_figures_xt_field):
+            os.mkdir(path_figures_xt_field)
+    else:
+        path_figures_xt_field = None
+
+    if config.plot_EADS:
+        path_figures_iead = os.path.join(path_figures, "IEAD")
+        if not os.path.isdir(path_figures_iead):
+            os.mkdir(path_figures_iead)
+    else:
+        path_figures_iead = None
+
+    if config.plot_local_potential_over_time:
+        path_figures_time_varying_potentials = os.path.join(path_figures, "time_varying_potentials")
+        if not os.path.isdir(path_figures_time_varying_potentials):
+            os.mkdir(path_figures_time_varying_potentials)
+    else:
+        path_figures_time_varying_potentials = None
+
+    return path_figures, path_figures_xt_field, path_figures_iead, path_figures_time_varying_potentials
 
 
 def set_plot_globals():
@@ -148,15 +185,12 @@ def plot_mean_energies_over_phase(cases, path_figures, species_plot="ION-TOT"):
 
     plt.figure()
     plt.plot(phases, mean_energies,  marker="o")
-    print(phases)
-    print(mean_energies)
     plt.xlabel("Phase angle (°)")
     plt.ylabel("Mean Energy (eV)")
     plt.title("Mean Energy")
     # save figure
     plt.savefig(path_save, dpi=600)
     plt.close()
-    exit()
 
 
 def plot_ead(case, path_figures_iead, iead_max_energy=None, plot_species='ION-TOT'):
@@ -268,16 +302,16 @@ def plot_geometry(cases, path_figures, plot_local_potential_over_time=False, pot
 
 def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     """
-    generates XT plot(s) of the Efield in z-direction.
+    generates XT plot(s) of the electric field in z-direction.
     It uses finds tecplot movie files and generates the plots based on the "R"-averaged values
 
     Args:
-        lower_half (bool): plot only ower half of reactor
+        lower_half (bool): plot only lower half of reactor
         do_color_bar (bool): show color bar in plot
         case (Case): path to movie.1.plt file
         path_figure:
     """
-    title = case.name + "_XT_Efield"
+    title = case.name + "_XT_E-field"
     path_movie1 = case.path_movie1
     freq = case.freq*1e-6
     mesh = case.mesh
@@ -322,89 +356,33 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
 
     v_max = 100
     v_min = -v_max
-
-    # find dimensions of Tecplot file
-    # --------------------------------------------------------------------
-    # find 'EZ'
-    with open(path_movie1) as f:
-        for line, row in enumerate(f):
-            if 'EZ' in row:
-                pos_in_zone = line - 2  # no of variable, R and Z omitted starting with 0
-                break
-
-    I = case.movie_I
-    J = case.movie_J
-    Zones = case.movie_num_zones
-
-    # read in data
-    # --------------------------------------------------------------------
-    lines_per_i = math.ceil(I / 7)
-
-    # find lines of zones
-    lines_zones = []
-    row = []
-    line_I = 0
-    line_I_begin = 0
-    line_I_end = 0
-    array = np.zeros((J, I, Zones))
-    Zone = -1
-    j = 0
-    line_var_begin = 0
-    line_var_end = 0
-    with open(path_movie1, "r") as fp:
-        for line, rowtext in enumerate(fp):
-            if 'ZONE' in rowtext:
-
-                Zone += 1
-                line_zone = line + 2
-
-                # because constants X and R are not repeated
-                line_var_begin = line_zone + (J * lines_per_i * pos_in_zone) + (j * lines_per_i)
-                if Zone == 0:
-                    line_var_begin = line_zone + (J * lines_per_i * (pos_in_zone + 2)) + (j * lines_per_i)
-                line_var_end = line_var_begin + lines_per_i * J
-                line_I_begin = line_var_begin
-                line_I_end = line_I_begin + lines_per_i
-
-            if line >= line_var_begin and line < line_var_end:
-
-                if line >= line_I_begin and line < line_I_end:
-                    row.extend([float(x) for x in rowtext.split()])
-
-                if line == line_I_end - 1:
-                    array[j, :, Zone] = row
-                    j += 1
-                    line_I_begin = line
-                    line_I_end = line_I_begin + lines_per_i + 1
-                    row = []
-                if j == J:
-                    j = 0
+    array = case.movie_read_to_xt_array("EZ")
 
     # prepare data
     # --------------------------------------------------------------------
     # create XT from 3D array
-    XT = np.mean(array[cell_boarder_bottom:cell_boarder_top, cell_boarder_left:cell_boarder_right, :], axis=1)
+    xt = np.mean(array[cell_boarder_bottom:cell_boarder_top, cell_boarder_left:cell_boarder_right, :], axis=1)
     splitpoint = 200
-    XT = np.hstack((XT[:, splitpoint:], XT[:, :splitpoint]))
+    xt = np.hstack((xt[:, splitpoint:], xt[:, :splitpoint]))
     # smooth in t-direction
-    XT = ndimage.uniform_filter1d(XT, 20, 1)
+    xt = ndimage.uniform_filter1d(xt, 20, 1)
 
     # plot heatmap
     # --------------------------------------------------------------------
 
-    plt.imshow(XT, cmap='jet', interpolation='bicubic', origin='lower', vmax=v_max, vmin=v_min,
+    plt.imshow(xt, cmap='jet', interpolation='bicubic', origin='lower', vmax=v_max, vmin=v_min,
                extent=[0, 1 / freq, 0, gap], aspect="auto")
     plt.colorbar()
     plt.xlabel(r"time ($\mu$s)")
     plt.ylabel('x (cm)')
     plt.tick_params(axis='both', which='both', labelcolor="black", tickdir='in', right=True, top=True)
     plt.title(title)
-    y = np.linspace(0, gap, XT.shape[0])
-    x = np.linspace(0, 1, XT.shape[1])
+    y = np.linspace(0, gap, xt.shape[0])
+    x = np.linspace(0, 1, xt.shape[1])
 
     # add zero contour
-    if (XT > 0).any():
-        contour = plt.contour(x, y, XT, colors='gray', levels=[0.0],
+    if (xt > 0).any():
+        contour = plt.contour(x, y, xt, colors='gray', levels=[0.0],
                               linestyles=['dashed', 'dashdot', 'dotted'], linewidths=1)
         plt.clabel(contour, inline=True, fontsize=8, fmt='%1.0f')
 
@@ -433,26 +411,26 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     ax2.tick_params(axis='y', right=False, left=False)
 
     # plot heatmap
-    img = ax1.imshow(XT, cmap='jet', interpolation='bicubic', origin='lower', vmax=v_max, vmin=v_min,
+    img = ax1.imshow(xt, cmap='jet', interpolation='bicubic', origin='lower', vmax=v_max, vmin=v_min,
                      extent=[0, 1 / freq, 0, gap], aspect='auto')
 
     # add zero contour
-    if (XT > 0).any():
-        contour = ax1.contour(x, y, XT, colors='gray', levels=[0.0],
+    if (xt > 0).any():
+        contour = ax1.contour(x, y, xt, colors='gray', levels=[0.0],
                               linestyles=['dashed', 'dashdot', 'dotted'], linewidths=1)
         plt.clabel(contour, inline=True, fontsize=8, fmt='%1.0f')
 
     # generate waveform
-    X = np.linspace(0, 1, 401)
+    x = np.linspace(0, 1, 401)
     if case.contains_custom:
-        Y = np.zeros(401)
+        y = np.zeros(401)
         for i, harm in enumerate(case.custom_relharm):
             k = harm
             phi = case.custom_phase[i]
-            Y += case.custom_relamp[i]*np.cos(2*k*np.pi*X + k*np.pi + phi/180*np.pi)
+            y += case.custom_relamp[i]*np.cos(2*k*np.pi*x + k*np.pi + phi/180*np.pi)
     else:
-        Y = -np.sin(2*np.pi*X)
-    ax2.plot(X, Y)
+        y = -np.sin(2*np.pi*x)
+    ax2.plot(x, y)
 
     # add color bar
     if do_color_bar:
@@ -488,10 +466,10 @@ def plot_EDF_compare(cases, path_figures, custom_waveform_only=False, species="I
     path_save = os.path.join(path_figures, "EDF_compare")
 
     # find energy bin limit
-    xmax=0
+    x = 0
     for case in cases:
-        if case.pcmc_max_energy[0] > xmax:
-            xmax = case.pcmc_max_energy[0]
+        if case.pcmc_max_energy[0] > x:
+            x = case.pcmc_max_energy[0]
 
     plt.figure()
     # loop over all cases
@@ -511,7 +489,7 @@ def plot_EDF_compare(cases, path_figures, custom_waveform_only=False, species="I
                             break
                     x = np.linspace(start=0, stop=case.pcmc_max_energy[0], num=case.pcmc_edfs[i].shape[0])
                     plt.plot(x, y, label=case.name)
-                    plt.xlim(0,x[bin_e_max]*1.1)
+                    plt.xlim(0, x[bin_e_max]*1.1)
 
     plt.xlabel("Energy (eV)")
     plt.ylabel("Relative frequency")
@@ -519,4 +497,3 @@ def plot_EDF_compare(cases, path_figures, custom_waveform_only=False, species="I
     # save figure
     plt.savefig(path_save, dpi=600)
     plt.close()
-
