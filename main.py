@@ -19,8 +19,8 @@ np.set_printoptions(linewidth=500)
 
 # Energy angular distributions
 plot_EADS = True                             # plot particle EADs on surface
-plot_EDFs = True                             # integrated energy distribution functions
-plot_ADFs = True                             # integrated energy distribution functions
+plot_EDFs = True                             # plot integrated energy distribution functions
+plot_ADFs = True                             # plot integrated energy distribution functions
 plot_EADS_species = ("ION-TOT", "E", "CF^")  # pcmc species to be plotted
 IEAD_max_energy = 3000                       # max energy for IEAD plot in eV (None if not used)
 EEAD_max_energy = 100                        # max energy for IEAD plot in eV (None if not used)
@@ -37,7 +37,9 @@ potential_over_time_labels = ["Bottom", "Bulk", "Top"]
 
 # root directory
 dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2"
-                           "\\DarkSpaceGeometry\\2MHz_Bottom\\2000_2000")
+                           "\\DarkSpaceGeometry\\10MHz_Bottom\\10MHz_2000_2000")
+
+# dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\CCP_ICP_realistic\\ICP_Coil10MHz_Bias2MHz_10mTorr\\initial")
 
 # create config object from locals()
 config = Config(locals())
@@ -70,11 +72,11 @@ plotting.set_plot_globals()
 if not cases.constant_phase:
     # plot DC bias over phase
     xy_phase_bias = cases.get_value_pair("cwaveform_phase", "dc_bias", custom_waveform_only=True)
-    plotting.plot_dc_bias_over_phase(xy_phase_bias, path_figures)
+    plotting.plot_dc_bias_vs_phase(xy_phase_bias, path_figures)
     # plot voltage amplitudes over phase
     xy_phase_voltage1 = cases.get_value_pair("cwaveform_phase", "final_voltages[0]", custom_waveform_only=True)
     xy_phase_voltage2 = cases.get_value_pair("cwaveform_phase", "final_voltages[1]", custom_waveform_only=True)
-    plotting.plot_voltages_over_phase(xy_phase_voltage1, xy_phase_voltage2, xy_phase_bias, path_figures)
+    plotting.plot_voltages_vs_phase(xy_phase_voltage1, xy_phase_voltage2, xy_phase_bias, path_figures)
 
 # plot geometry
 # ----------------------------------------------------------------------------
@@ -93,10 +95,10 @@ if plot_EADS or plot_EDFs or plot_ADFs:
             for s in plot_EADS_species:
                 plotting.plot_ead(case, path_figures_IEAD, iead_max_energy=IEAD_max_energy, plot_species=s)
     if plot_EDFs:
-        plotting.plot_EDF_compare(cases, path_figures, custom_waveform_only=False, species="ION-TOT")
+        plotting.plot_edf_compare(cases, path_figures, custom_waveform_only=True, species="ION-TOT")
 
-    plotting.plot_mean_energies_over_phase(cases, path_figures, species_plot="ION-TOT")
-
+    plotting.plot_mean_energies_vs_phase(cases, path_figures, species_plot="ION-TOT")
+    plotting.plot_mode_energies_vs_phase(cases, path_figures, species_plot="ION-TOT")
 
 # load and plot time varying voltages
 # ----------------------------------------------------------------------------

@@ -105,7 +105,7 @@ def set_plot_globals():
     plt.rcParams['legend.loc'] = 'best'
 
 
-def plot_dc_bias_over_phase(xy, path_figures):
+def plot_dc_bias_vs_phase(xy, path_figures):
     """
     plots dc self bias as a function of custom waveform pase
     Args:
@@ -129,7 +129,7 @@ def plot_dc_bias_over_phase(xy, path_figures):
     plt.close()
 
 
-def plot_voltages_over_phase(xy_voltage1, xy_voltage2, xy_dc_bias, path_figures):
+def plot_voltages_vs_phase(xy_voltage1, xy_voltage2, xy_dc_bias, path_figures):
     """
     plots voltages amplitudes as a function of custom voltage phase shift for 1 or 2 electrode setup
     Args:
@@ -159,7 +159,7 @@ def plot_voltages_over_phase(xy_voltage1, xy_voltage2, xy_dc_bias, path_figures)
     plt.close()
 
 
-def plot_mean_energies_over_phase(cases, path_figures, species_plot="ION-TOT"):
+def plot_mean_energies_vs_phase(cases, path_figures, species_plot="ION-TOT"):
     """
 
     Args:
@@ -174,6 +174,10 @@ def plot_mean_energies_over_phase(cases, path_figures, species_plot="ION-TOT"):
     mean_energies = []
     phases = []
     for case in cases:
+        # skip if case contains no tailored waveform
+        if not case.contains_custom:
+            continue
+        # find mean energies corresponding to species to be plotted
         for i, species in enumerate(case.pcmc_species):
             if species == species_plot:
                 mean_energies.append(case.pcmc_mean_energy[i])
@@ -188,6 +192,44 @@ def plot_mean_energies_over_phase(cases, path_figures, species_plot="ION-TOT"):
     plt.xlabel("Phase angle (°)")
     plt.ylabel("Mean Energy (eV)")
     plt.title("Mean Energy")
+    # save figure
+    plt.savefig(path_save, dpi=600)
+    plt.close()
+
+
+def plot_mode_energies_vs_phase(cases, path_figures, species_plot="ION-TOT"):
+    """
+
+    Args:
+        cases (Cases): Case container object
+        path_figures (str): path to figures directory
+        species_plot (str): species of which the mean energies are plotted
+    """
+    # file path for saved image
+    path_save = os.path.join(path_figures, "Mode_Energy")
+
+    # fetch date from case objects
+    mode_energies = []
+    phases = []
+    for case in cases:
+        # skip if case contains no tailored waveform
+        if not case.contains_custom:
+            continue
+        # find mean energies corresponding to species to be plotted
+        for i, species in enumerate(case.pcmc_species):
+            if species == species_plot:
+                mode_energies.append(case.pcmc_mode_energy[i])
+                break
+        phases.append(case.custom_phase[1])
+
+    # sort lists based on phase
+    phases, mean_energies = (list(t) for t in zip(*sorted(zip(phases, mode_energies))))
+
+    plt.figure()
+    plt.plot(phases, mean_energies,  marker="o")
+    plt.xlabel("Phase angle (°)")
+    plt.ylabel("Mode Energy (eV)")
+    plt.title("Mode Energy")
     # save figure
     plt.savefig(path_save, dpi=600)
     plt.close()
@@ -453,7 +495,7 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     print(f"   figure saved to {path_save}")
 
 
-def plot_EDF_compare(cases, path_figures, custom_waveform_only=False, species="ION-TOT"):
+def plot_edf_compare(cases, path_figures, custom_waveform_only=False, species="ION-TOT"):
     """
     plots all edfs of cases in a single comparative plot
     optional: only plot cases containing custom voltage waveforms

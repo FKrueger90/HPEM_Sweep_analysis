@@ -74,28 +74,32 @@ class Case:
         self.pcmc_max_angle = (None, None)                                  # max pcmc angle tuple: (ions, neutrals)
         self.pcmc_max_energy = (None, None)                                 # max pcmc energy tuple: (ions, neutrals)
         self.pcmc_mean_energy = []                                          # mean particle energies
+        self.pcmc_mode_energy = []                                          # mode value particle energies
         # power and voltage setup
-        self.irfpow = int(eval(self.find_nam_parameter("IRFPOW")))           # adjust voltages for power target
+        self.irfpow = self.find_nam_parameter("IRFPOW", expected_type="int")         # adjust voltages for power target
         self.powerICP = 0
         self.powerCCP1 = 0
         self.powerCCP2 = 0
-        self.rfpnorma = list(eval(self.find_nam_parameter("RFPNORMA")))          # target power
-        self.icustom = list(eval(self.find_nam_parameter("ICUSTOM")))            # use of custom waveforms
-        self.contains_custom = self.icustom != [0] * len(self.icustom)           # contains custom waveforms flag
-        self.custom_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))        # phase of harmonics
-        self.custom_relharm = eval(self.find_nam_parameter("CUSTOM_RELHARM"))    # relative orders of harmonics
-        self.custom_relamp = eval(self.find_nam_parameter("CUSTOM_RELAMP"))      # relative amplitude of harmonics
-        self.cwaveform_phase = eval(self.find_nam_parameter("CUSTOM_PHASE"))[1]  # relative phase of harmonics
+        self.rfpnorma = self.find_nam_parameter("RFPNORMA", expected_type='list_float')             # target powers
+        self.icustom = self.find_nam_parameter("ICUSTOM", expected_type='list_int')                 # use of custom waveforms
+        self.contains_custom = self.icustom != [0] * len(self.icustom)                     # custom waveforms flag
+        self.custom_phase = self.find_nam_parameter("CUSTOM_PHASE", expected_type='list_float')     # phase of harmonics
+        self.custom_relharm = self.find_nam_parameter("CUSTOM_RELHARM", expected_type='list_int')   # rel. orders of harmonics
+        self.custom_relamp = self.find_nam_parameter("CUSTOM_RELAMP", expected_type='list_float')   # rel. amplitude of harmonics
+        if self.custom_phase:
+            self.cwaveform_phase = self.custom_phase[1]                         # main relative phase of harmonics
+        else:
+            self.cwaveform_phase = None
         # material data
-        self.cwafer = list(eval(self.find_nam_parameter("CWAFER")))              # wafer materials
-        self.metal_labels = list(eval(self.find_nam_parameter("CMETAL")))        # metal material labels
+        self.cwafer = self.find_nam_parameter("CWAFER", expected_type='list_str')         # wafer materials
+        self.metal_labels = self.find_nam_parameter("CMETAL", expected_type='list_str')   # metal material labels
         # quantities after convergence
         self.final_voltages = self.get_final_voltages()                          # voltage amplitudes on last iteration
         self.dc_bias = eval(self.find_out_parameter("DC BIAS"))                  # DC self-bias on last iteration
         self.ne_ave = eval(self.find_out_parameter("AVERAGE ELECTRON DENSITY"))  # average n_e on last iteration
-        self.restart = int(self.find_nam_parameter("IRESTART"))                  # IRESTART .nam-value
-        self.rffac = int(float(self.find_nam_parameter("RFFAC")))                # RFFAC .nam-value
-        self.freq = float(self.find_nam_parameter("FREQ"))                       # FREQ .nam-value
+        self.restart = self.find_nam_parameter("IRESTART", expected_type='int')           # IRESTART .nam-value
+        self.rffac = self.find_nam_parameter("RFFAC", expected_type='int')                # RFFAC .nam-value
+        self.freq = self.find_nam_parameter("FREQ", expected_type='float')                # FREQ .nam-value
         # properties of movie file
         self.movie_I, self.movie_J, self.movie_num_zones = self.movie_find_dimensions()
         self.potential_xt = []                  # XT data of potential
@@ -136,23 +140,25 @@ class Case:
 
         return None
 
-    def find_nam_parameter(self, str_match, multiple_values=False):
+    def find_nam_parameter(self, str_match, expected_type="str", multiple_values=False):
         """
         finds value of .nam parameter in .nam list file
 
         Args:
             str_match (str): string used for name matching
+            expected_type(str): expected type of value,
+                       supported values: int, float, str, int_list, float_list, str_list
             multiple_values ():
-
-        Returns:
-
         """
+        parameter = ""
         with open(self.path_nam, 'r') as f:
             lines = f.readlines()
             for line in lines:
                 if re.search(rf' *{str_match} *=', line):
                     if "!" in line:
-                        parameter = re.findall(r'= *(.*)(?=,*\s*!)', line)[0]
+                        parameter = line[line.find("=")+1:line.find("!")]
+                        print(parameter)
+                        # parameter = re.findall(r'= *(.*)(?=,*\s*!)', line)[0]
                     else:
                         parameter = re.findall(r'= *(.*)(?=,*\s*$)', line)[0]
                     # remove leading and trailing whitespaces
@@ -160,7 +166,22 @@ class Case:
                     # remove last ',' symbol if present
                     if parameter[-1] == ",":
                         parameter = parameter[:-1]
-                    return parameter
+                    break
+        # format results according to expected_type
+        if parameter:
+            if expected_type == 'int':
+                return int(float(parameter))
+            if expected_type == 'float':
+                return float(parameter)
+            if expected_type == 'str':
+                return parameter
+            if expected_type == 'list_int':
+                parameter = [int(i) for i in list(eval(parameter))]
+                return parameter
+            if expected_type == 'list_float':
+                return list(eval(parameter))
+            if expected_type == 'list_str':
+                return list(eval(parameter))
         return None
 
     def find_out_parameter(self, str_match):
@@ -186,15 +207,24 @@ class Case:
         """
         voltages = []
         for num_metal, metal in enumerate(self.metal_labels):
-            parameter = 0
-            with open(self.path_out, 'r') as f:
-                lines = f.readlines()
-                for line in lines[::-1]:
-                    regex = rf' +{metal} +\d\.\d\d\dE\+\d\d  +(\d\.\d\d\dE\+\d\d) +'
-                    if re.search(regex, line):
-                        parameter = eval(re.findall(regex, line)[0])
-                        break
-            voltages.append(parameter)
+            # check if voltages are adjusted to match power target
+            if self.find_nam_parameter("IRFPOW", expected_type='int'):
+                parameter = 0
+                with open(self.path_out, 'r') as f:
+                    lines = f.readlines()
+                    for line in lines[::-1]:
+                        regex = rf' +{metal} +\d\.\d\d\dE\+\d\d  +(\d\.\d\d\dE\+\d\d) +'
+                        if re.search(regex, line):
+                            parameter = eval(re.findall(regex, line)[0])
+                            break
+                voltages.append(parameter)
+            # if voltages are not adjusted use initial voltages
+            else:
+                voltages = self.find_nam_parameter("VRFM").split()
+                # remove commas and interpret as float
+                for i, s in enumerate(voltages):
+                    voltages[i] = float(s.replace(",", ""))
+
         return voltages
 
     def read_mesh_file(self):
@@ -349,7 +379,7 @@ class Case:
             edf = edf/sum(edf)
             self.pcmc_edfs.append(edf)
 
-    def get_mean_energies(self):
+    def get_mean_and_mode_energies(self):
         """
         determines mean particle energy of  pcmc species
         """
@@ -371,6 +401,12 @@ class Case:
             # append to mean energies list
             self.pcmc_mean_energy.append(energy_mean)
 
+            # find mode energy value
+            bin_mode = np.argmax(edf)
+            mode_energy = scale_energy[bin_mode]
+            # append to mode energy list
+            self.pcmc_mode_energy.append(mode_energy)
+
     def generate_adfs(self):
         """
         integrates Energy Angular Distributions to generate 1D angular distribution
@@ -384,7 +420,7 @@ class Case:
         """
         finds dimensions of the movie file
         """
-        num_zones = int(self.find_nam_parameter("IMOVIE_FRAMES")) + 1
+        num_zones = self.find_nam_parameter("IMOVIE_FRAMES", expected_type='int') + 1
         # in tecplot notation, array dimensions are generally I,J,K
         # here denoted as "idim", "jdim" and "kdim" in order to conform to code style conventions
         # find dimensions of Tecplot file
@@ -675,4 +711,4 @@ class Cases:
                 case.read_pcmc_file()
             if config.plot_EDFs:
                 case.generate_edfs()
-                case.get_mean_energies()
+                case.get_mean_and_mode_energies()
