@@ -285,6 +285,10 @@ def plot_voltages_over_time(case, path_figure):
         case (Case): path to movie.1.plt file
         path_figure:
     """
+    # check object data
+    if case.potential_over_time is None or case.potential_over_time == []:
+        return
+
     y_extension = 1.1  # extend y axis with buffer to avoid label collision at origin
     path_save = os.path.join(path_figure, "Potentials_over_Time" + case.name)
     fig, ax = plt.subplots()
@@ -399,6 +403,10 @@ def movie2xt(case, path_figure, lower_half=True, do_color_bar=True):
     v_max = 100
     v_min = -v_max
     array = case.movie_read_to_xt_array("EZ")
+
+    # check return type
+    if array is None:
+        return
 
     # prepare data
     # --------------------------------------------------------------------

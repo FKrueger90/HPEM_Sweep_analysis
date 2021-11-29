@@ -71,8 +71,8 @@ class Case:
         self.pcmc_eads = []                                                 # 2D energy-angle distributions
         self.pcmc_edfs = []                                                 # 1D energy distributions
         self.pcmc_adfs = []                                                 # 1D angle distributions
-        self.pcmc_max_angle = (None, None)                                  # max pcmc angle tuple: (ions, neutrals)
-        self.pcmc_max_energy = (None, None)                                 # max pcmc energy tuple: (ions, neutrals)
+        self.pcmc_max_angle = (0, 0)                                        # max pcmc angle tuple: (ions, neutrals)
+        self.pcmc_max_energy = (0, 0)                                       # max pcmc energy tuple: (ions, neutrals)
         self.pcmc_mean_energy = []                                          # mean particle energies
         self.pcmc_mode_energy = []                                          # mode value particle energies
         # power and voltage setup
@@ -130,12 +130,12 @@ class Case:
                 return os.path.join(self.path, name_file)
         abspath = os.path.abspath(self.path)
         uppath = os.path.dirname(os.path.abspath(self.path))
-        print(abspath)
-        print(uppath)
+
         for name_file in os.listdir(uppath):
             if str_match in name_file.lower() and not any(x in name_file.lower() for x in str_exclude):
                 return os.path.join(uppath, name_file)
-
+        print(abspath)
+        print(uppath)
         print(f"\033[91mcould not find file matching '{str_match}'\033[0m")
 
         return None
@@ -157,8 +157,6 @@ class Case:
                 if re.search(rf' *{str_match} *=', line):
                     if "!" in line:
                         parameter = line[line.find("=")+1:line.find("!")]
-                        print(parameter)
-                        # parameter = re.findall(r'= *(.*)(?=,*\s*!)', line)[0]
                     else:
                         parameter = re.findall(r'= *(.*)(?=,*\s*$)', line)[0]
                     # remove leading and trailing whitespaces
@@ -376,7 +374,9 @@ class Case:
         """
         for ead in self.pcmc_eads:
             edf = np.sum(ead, axis=1)
-            edf = edf/sum(edf)
+
+            if sum(edf) != 0:
+                edf = edf/sum(edf)
             self.pcmc_edfs.append(edf)
 
     def get_mean_and_mode_energies(self):
@@ -397,7 +397,8 @@ class Case:
             for j, e in enumerate(scale_energy):
                 energy_mean += e * edf[j]
             # normalize
-            energy_mean = energy_mean / np.sum(edf)
+            if np.sum(edf) != 0:
+                energy_mean = energy_mean / np.sum(edf)
             # append to mean energies list
             self.pcmc_mean_energy.append(energy_mean)
 
@@ -420,6 +421,10 @@ class Case:
         """
         finds dimensions of the movie file
         """
+        # skip if no movie1 file was found
+        if not self.path_movie1:
+            return None, None, None
+
         num_zones = self.find_nam_parameter("IMOVIE_FRAMES", expected_type='int') + 1
         # in tecplot notation, array dimensions are generally I,J,K
         # here denoted as "idim", "jdim" and "kdim" in order to conform to code style conventions
@@ -457,6 +462,9 @@ class Case:
         Args:
             quantity (str): Name of quantity to read
         """
+        # skip if no movie1 file was found
+        if not self.path_movie1:
+            return None
         # find 'quantity' position in file
         pos_in_zone = None
         with open(self.path_movie1) as f:
@@ -527,14 +535,20 @@ class Case:
             locs (list of tuple): List of tuples of coordinates for probing
             labels (list of str): Labels of probe points
         """
+        # call movie_read_to_xt_array if self.potential_xt is None r 0
         if not self.potential_xt:
             self.potential_xt = self.movie_read_to_xt_array("PPOT")
+
+        # check if XT-potential was found
+        if self.potential_xt is None:
+            return None
 
         if type(locs) is tuple and len(locs) == 2:
             locs = [locs]
 
         for loc in locs:
-            self.potential_over_time.append(self.potential_xt[loc[1], loc[0], :])
+            if loc[1] < self.potential_xt.shape[0] and loc[0] < self.potential_xt.shape[1]:
+                self.potential_over_time.append(self.potential_xt[loc[1], loc[0], :])
         self.potential_over_time_labels = labels
 
         return

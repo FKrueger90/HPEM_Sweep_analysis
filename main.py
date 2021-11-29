@@ -39,7 +39,7 @@ potential_over_time_labels = ["Bottom", "Bulk", "Top"]
 dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2"
                            "\\DarkSpaceGeometry\\10MHz_Bottom\\10MHz_2000_2000")
 
-# dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\CCP_ICP_realistic\\ICP_Coil10MHz_Bias2MHz_10mTorr\\initial")
+dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\CCP_ICP_realistic\\ICP_Coil10MHz_Bias2MHz_10mTorr\\initial")
 
 # create config object from locals()
 config = Config(locals())
@@ -97,8 +97,9 @@ if plot_EADS or plot_EDFs or plot_ADFs:
     if plot_EDFs:
         plotting.plot_edf_compare(cases, path_figures, custom_waveform_only=True, species="ION-TOT")
 
-    plotting.plot_mean_energies_vs_phase(cases, path_figures, species_plot="ION-TOT")
-    plotting.plot_mode_energies_vs_phase(cases, path_figures, species_plot="ION-TOT")
+    if not cases.constant_phase:
+        plotting.plot_mean_energies_vs_phase(cases, path_figures, species_plot="ION-TOT")
+        plotting.plot_mode_energies_vs_phase(cases, path_figures, species_plot="ION-TOT")
 
 # load and plot time varying voltages
 # ----------------------------------------------------------------------------
