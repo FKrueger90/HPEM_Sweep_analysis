@@ -142,12 +142,12 @@ def plot_voltages_vs_phase(xy_voltage1, xy_voltage2, xy_dc_bias, path_figures):
     path_save = os.path.join(path_figures, "Voltages")
 
     fig, ax = plt.subplots()
-    ax.plot(xy_voltage1[0], xy_voltage1[1])
-    ax.scatter(xy_voltage1[0], xy_voltage1[1])
-    ax.plot(xy_voltage2[0], xy_voltage2[1])
-    ax.scatter(xy_voltage2[0], xy_voltage2[1])
-    ax.plot(xy_dc_bias[0], xy_dc_bias[1])
-    ax.scatter(xy_dc_bias[0], xy_dc_bias[1])
+    ax.plot(xy_voltage1[0], xy_voltage1[1], color="g")
+    ax.scatter(xy_voltage1[0], xy_voltage1[1], color="g")
+    ax.plot(xy_voltage2[0], xy_voltage2[1], color="b")
+    ax.scatter(xy_voltage2[0], xy_voltage2[1], color="b")
+    ax.plot(xy_dc_bias[0], xy_dc_bias[1], color="r")
+    ax.scatter(xy_dc_bias[0], xy_dc_bias[1], color="r")
     ax.set_xlim(0, 180)
     ax.set_xticks(xy_voltage1[0])
     ax.tick_params(direction='in', right=True, top=True)
@@ -170,7 +170,7 @@ def plot_mean_energies_vs_phase(cases, path_figures, species_plot="ION-TOT"):
     # file path for saved image
     path_save = os.path.join(path_figures, "Mean_Energy")
 
-    # fetch date from case objects
+    # fetch data from case objects
     mean_energies = []
     phases = []
     for case in cases:
@@ -192,6 +192,8 @@ def plot_mean_energies_vs_phase(cases, path_figures, species_plot="ION-TOT"):
     plt.xlabel("Phase angle (°)")
     plt.ylabel("Mean Energy (eV)")
     plt.title("Mean Energy")
+    plt.xlim(0, 180)
+    plt.xticks(phases)
     # save figure
     plt.savefig(path_save, dpi=600)
     plt.close()

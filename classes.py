@@ -80,12 +80,12 @@ class Case:
         self.powerICP = 0
         self.powerCCP1 = 0
         self.powerCCP2 = 0
-        self.rfpnorma = self.find_nam_parameter("RFPNORMA", expected_type='list_float')             # target powers
-        self.icustom = self.find_nam_parameter("ICUSTOM", expected_type='list_int')                 # use of custom waveforms
-        self.contains_custom = self.icustom != [0] * len(self.icustom)                     # custom waveforms flag
+        self.rfpnorma = self.find_nam_parameter("RFPNORMA", expected_type='list_float')        # target powers
+        self.icustom = self.find_nam_parameter("ICUSTOM", expected_type='list_int')            # use of custom waveforms
+        self.contains_custom = self.icustom != [0] * len(self.icustom)                         # custom waveforms flag
         self.custom_phase = self.find_nam_parameter("CUSTOM_PHASE", expected_type='list_float')     # phase of harmonics
-        self.custom_relharm = self.find_nam_parameter("CUSTOM_RELHARM", expected_type='list_int')   # rel. orders of harmonics
-        self.custom_relamp = self.find_nam_parameter("CUSTOM_RELAMP", expected_type='list_float')   # rel. amplitude of harmonics
+        self.custom_relharm = self.find_nam_parameter("CUSTOM_RELHARM", expected_type='list_int')  # orders of harmonics
+        self.custom_relamp = self.find_nam_parameter("CUSTOM_RELAMP", expected_type='list_float')  # amplitude of harm.
         if self.custom_phase:
             self.cwaveform_phase = self.custom_phase[1]                         # main relative phase of harmonics
         else:
@@ -140,7 +140,7 @@ class Case:
 
         return None
 
-    def find_nam_parameter(self, str_match, expected_type="str", multiple_values=False):
+    def find_nam_parameter(self, str_match, expected_type="str"):
         """
         finds value of .nam parameter in .nam list file
 
@@ -148,7 +148,6 @@ class Case:
             str_match (str): string used for name matching
             expected_type(str): expected type of value,
                        supported values: int, float, str, int_list, float_list, str_list
-            multiple_values ():
         """
         parameter = ""
         with open(self.path_nam, 'r') as f:
@@ -218,10 +217,10 @@ class Case:
                 voltages.append(parameter)
             # if voltages are not adjusted use initial voltages
             else:
-                voltages = self.find_nam_parameter("VRFM").split()
+                voltages = self.find_nam_parameter("VRFM", expected_type='list_float')
                 # remove commas and interpret as float
-                for i, s in enumerate(voltages):
-                    voltages[i] = float(s.replace(",", ""))
+                #for i, s in enumerate(voltages):
+                 #   voltages[i] = float(s.replace(",", ""))
 
         return voltages
 
@@ -561,6 +560,9 @@ class Cases:
         self.constant_power = None
         self.constant_phase = None
 
+        self.mean_energies = []
+        self.phases = []
+
     def __getitem__(self, i) -> Case:
         """
 
@@ -684,6 +686,7 @@ class Cases:
 
         # print sweep metrics
         print("\nanalyzing sweep metrics:\n-----------------------------------")
+        print(powers)
         if const_power:
             print("constant power:")
             for i, p in enumerate(powers[0]):
@@ -726,3 +729,33 @@ class Cases:
             if config.plot_EDFs:
                 case.generate_edfs()
                 case.get_mean_and_mode_energies()
+
+    def load_sweep_data(self):
+        for case in self.cases:
+            # skip if case contains no tailored waveform
+            if not case.contains_custom:
+                continue
+            # find mean energies corresponding to species to be plotted
+            for i, species in enumerate(case.pcmc_species):
+                if species == "ION-TOT":
+                    self.mean_energies.append(case.pcmc_mean_energy[i])
+                    break
+            self.phases.append(case.custom_phase[1])
+
+            # sort lists based on phase
+            self.phases, self.mean_energies = (list(t) for t in zip(*sorted(zip(self.phases, self.mean_energies))))
+
+    def save_data_to_csv(self, dir_root):
+
+        # generate data folder if non existent
+        path_data = os.path.join(dir_root, "Data")
+        if not os.path.isdir(path_data):
+            os.mkdir(path_data)
+        print("saving data to file" )
+        f = open(os.path.join(path_data, "data.csv"), "w")
+        f.write("phase, mean energy\n")
+        for i, phase in enumerate(self.phases):
+            f.write(f"{phase}, {self.mean_energies[i]}\n")
+        f.close()
+
+
