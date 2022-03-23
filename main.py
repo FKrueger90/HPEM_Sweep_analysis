@@ -37,7 +37,7 @@ potential_over_time_labels = ["Bottom", "Bulk", "Top"]
 
 # root directory
 dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2\\DarkSpaceGeometry"
-                               "\\10MHz_Bottom\\10MHz_ConstVoltage_300_1500r1")
+                               "\\10MHz_Bottom\\10MHz2000_2000r1")
 # dir_root = os.path.abspath("F:\\Archive\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2\\500W_top\\500_2000r2")
 
 # dir_root = os.path.abspath("D:\\UIGEL5_D_Florian\\Voltage_Waveform_Tailoring\\HPEM\\ArCF4O2\\DarkSpaceGeometry\\5MHz_Bottom\\5MHz_ConstVoltage_300_1500res1")

@@ -2,6 +2,7 @@ from matplotlib import colors
 import matplotlib.ticker as ticker
 
 import os
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -549,3 +550,89 @@ def plot_edf_compare(cases, path_figures, custom_waveform_only=False, species="I
     # save figure
     plt.savefig(path_save, dpi=600)
     plt.close()
+
+
+# =========================================================================================
+# external utilities
+# =========================================================================================
+
+def plot_compare_sweeps_mean_energy(paths, name_var1, name_var2, labels=[], labels_posx=[]):
+    var1_set = []
+    var2_set = []
+
+    for path in paths:
+
+        first_row = True
+        var1 = []
+        var2 = []
+
+        print(f"reading '{path}'...")
+        with open(path, newline='') as csvfile:
+
+            reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+
+            for row in reader:
+
+                # find name_var1 and name_var1 in column header
+                if first_row:
+                    pos_var1 = None
+                    pos_var2 = None
+                    print(row)
+
+                    for pos, var in enumerate(row):
+                        if name_var1 == var.strip():
+                            pos_var1 = pos
+                            print(f"{name_var1} -> column  {pos_var1}")
+                        if name_var2 == var.strip():
+                            pos_var2 = pos
+                            print(f"{name_var2} -> column  {pos_var2}")
+
+                    if pos_var1 is None:
+                        print(f"could not find {name_var1}in header")
+                        exit()
+                    if pos_var2 is None:
+                        print(f"could not find {name_var2}in header")
+                        exit()
+                    first_row = False
+                    continue
+
+                var1.append(row[pos_var1])
+                var2.append(row[pos_var2])
+
+        var1_set.append(var1)
+        var2_set.append(var2)
+
+    # convert lists of str to floats
+    for i, var1 in enumerate(var1_set):
+        var1_set[i] = list(map(float, var1_set[i]))
+    for i, var2 in enumerate(var2_set):
+        var2_set[i] = list(map(float, var2_set[i]))
+
+    fig, ax = plt.subplots()
+    ax.set_xlim(0, 180)
+    ax.set_ylim(0, 1200)
+    for i, var1 in enumerate(var1_set):
+
+        if len(labels) > i:
+            ax.plot(var1_set[i], var2_set[i], label=labels[i])
+
+            arrow_point_xy = (var1_set[i][i], var2_set[i][i])
+            # text_xy = (var1_set[i][i]+10, (i+1)*100)
+            text_xy = (arrow_point_xy[0]+10,  arrow_point_xy[1]-200)
+
+            arrowprops= dict(
+                facecolor='black',
+                shrink=0.03,
+                width=2)
+
+            ax.annotate(labels[i], xy=arrow_point_xy, xycoords='data',
+                        xytext=text_xy, textcoords='data',
+                        arrowprops=arrowprops,
+                        horizontalalignment='left', verticalalignment='top'
+                        )
+        else:
+            ax.plot(var1_set[i], var2_set[i])
+
+    # plt.legend()
+    plt.show()
+
